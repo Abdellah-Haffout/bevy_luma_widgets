@@ -334,6 +334,19 @@ fn on_button_pointer_click(
     }
 }
 
+fn on_button_focus_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    query: Query<&LumaButton>,
+) {
+    let entity = trigger.entity;
+    if let Ok(button) = query.get(entity) {
+        if !button.disabled {
+            commands.trigger(ButtonClicked(entity));
+        }
+    }
+}
+
 pub struct LumaButtonPlugin;
 
 impl Plugin for LumaButtonPlugin {
@@ -341,6 +354,7 @@ impl Plugin for LumaButtonPlugin {
         app.register_type::<LumaButton>()
             .register_type::<ButtonVariant>()
             .register_type::<ButtonSize>()
-            .add_observer(on_button_pointer_click);
+            .add_observer(on_button_pointer_click)
+            .add_observer(on_button_focus_activate);
     }
 }

@@ -123,31 +123,28 @@ pub fn luma_radio(
         ]
     }
 }
-
-fn on_radio_click(
-    trigger: On<Pointer<Click>>,
-    mut commands: Commands,
-    mut all_radios: Query<(Entity, &mut LumaRadio, &mut UBorder, Option<&Children>)>,
-    mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+fn select_radio(
+    target_entity: Entity,
+    commands: &mut Commands,
+    all_radios: &mut Query<(Entity, &mut LumaRadio, &mut UBorder, Option<&Children>)>,
+    dot_query: &mut Query<&mut UNode, With<LumaRadioDot>>,
 ) {
-    let clicked_entity = trigger.entity.entity();
-
-    // Check if clicked entity is a radio
-    let Ok((_, clicked_radio, _, _)) = all_radios.get(clicked_entity) else {
+    // Check if target entity is a radio
+    let Ok((_, target_radio, _, _)) = all_radios.get(target_entity) else {
         return;
     };
 
-    if clicked_radio.disabled {
+    if target_radio.disabled {
         return;
     }
 
-    let target_group = clicked_radio.group.clone();
-    let selected_value = clicked_radio.value.clone();
+    let target_group = target_radio.group.clone();
+    let selected_value = target_radio.value.clone();
 
-    // Synchronize the entire group: select clicked, deselect others in same group
+    // Synchronize the entire group: select target, deselect others in same group
     for (entity, mut radio, mut border, children) in all_radios.iter_mut() {
         if radio.group == target_group {
-            let is_now_selected = entity == clicked_entity;
+            let is_now_selected = entity == target_entity;
             radio.selected = is_now_selected;
 
             border.color = if is_now_selected { SELECTED_COLOR } else { UNSELECTED_BORDER };
@@ -165,8 +162,26 @@ fn on_radio_click(
     commands.trigger(RadioChanged {
         group: target_group,
         value: selected_value,
-        entity: clicked_entity,
+        entity: target_entity,
     });
+}
+
+fn on_radio_click(
+    trigger: On<Pointer<Click>>,
+    mut commands: Commands,
+    mut all_radios: Query<(Entity, &mut LumaRadio, &mut UBorder, Option<&Children>)>,
+    mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+) {
+    select_radio(trigger.entity.entity(), &mut commands, &mut all_radios, &mut dot_query);
+}
+
+fn on_radio_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    mut all_radios: Query<(Entity, &mut LumaRadio, &mut UBorder, Option<&Children>)>,
+    mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+) {
+    select_radio(trigger.entity, &mut commands, &mut all_radios, &mut dot_query);
 }
 
 pub struct LumaRadioPlugin;
@@ -175,6 +190,7 @@ impl Plugin for LumaRadioPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaRadio>()
             .register_type::<LumaRadioDot>()
-            .add_observer(on_radio_click);
+            .add_observer(on_radio_click)
+            .add_observer(on_radio_activate);
     }
 }

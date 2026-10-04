@@ -267,6 +267,61 @@ fn slider_sync_system(
     }
 }
 
+/// Handles keyboard navigation when the slider is focused (Left/Right/Up/Down/Home/End).
+fn slider_keyboard_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut LumaSlider), With<UFocused>>,
+) {
+    let Some(keyboard) = keyboard else { return };
+    for (entity, mut slider) in query.iter_mut() {
+        if slider.disabled || slider.width <= 0.0 {
+            continue;
+        }
+
+        let step = slider.step.unwrap_or_else(|| (slider.max - slider.min) * 0.05);
+        let mut changed = false;
+
+        if keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::ArrowDown) {
+            slider.value = (slider.value - step).clamp(slider.min, slider.max);
+            changed = true;
+        } else if keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::ArrowUp) {
+            slider.value = (slider.value + step).clamp(slider.min, slider.max);
+            changed = true;
+        } else if keyboard.just_pressed(KeyCode::Home) {
+            slider.value = slider.min;
+            changed = true;
+        } else if keyboard.just_pressed(KeyCode::End) {
+            slider.value = slider.max;
+            changed = true;
+        }
+
+        if changed {
+            commands.trigger(SliderChanged {
+                entity,
+                value: slider.value,
+            });
+        }
+    }
+}
+
+/// Observer handling Enter/Space activation when focused.
+fn on_slider_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    query: Query<&LumaSlider>,
+) {
+    let entity = trigger.entity;
+    if let Ok(slider) = query.get(entity) {
+        if !slider.disabled {
+            commands.trigger(SliderChanged {
+                entity,
+                value: slider.value,
+            });
+        }
+    }
+}
+
 pub struct LumaSliderPlugin;
 
 impl Plugin for LumaSliderPlugin {
@@ -276,6 +331,7 @@ impl Plugin for LumaSliderPlugin {
             .register_type::<LumaSliderThumb>()
             .add_observer(on_slider_drag)
             .add_observer(on_slider_click)
-            .add_systems(Update, slider_sync_system);
+            .add_observer(on_slider_activate)
+            .add_systems(Update, (slider_sync_system, slider_keyboard_system));
     }
 }

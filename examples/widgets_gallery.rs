@@ -8,7 +8,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Luma Widgets Gallery".into(),
-                resolution: (1000, 750).into(),
+                resolution: (1080, 920).into(),
                 ..default()
             }),
             ..default()
@@ -33,13 +33,13 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
             width: UVal::Percent(1.0),
             height: UVal::Percent(1.0),
             background_color: Color::srgb(0.06, 0.07, 0.09),
-            padding: USides::all(32.0),
+            padding: USides::all(28.0),
         }
         ULayout {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Column,
-            gap: 20.0,
             align_items: UAlignItems::Center,
+            gap: 16.0,
         }
         Children [
             // Gallery Header
@@ -48,8 +48,8 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Column,
-                    gap: 6.0,
                     align_items: UAlignItems::Center,
+                    gap: 6.0,
                 }
                 Children [
                     (UText {
@@ -59,8 +59,8 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                         color: Color::WHITE,
                     }),
                     (UText {
-                        text: { "Clean, accessible, SDF-rendered UI components for Bevy".to_string() },
-                        font_size: 14.0,
+                        text: { "Clean, accessible, SDF-rendered UI components with keyboard navigation".to_string() },
+                        font_size: 13.0,
                         font: { font.clone() },
                         color: Color::srgb(0.55, 0.60, 0.72),
                     })
@@ -75,10 +75,10 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
             // Main Content Card
             (
                 UNode {
-                    width: UVal::Px(880.0),
+                    width: UVal::Px(940.0),
                     background_color: Color::srgb(0.10, 0.12, 0.16),
                     border_radius: UCornerRadius::all(14.0),
-                    padding: USides::all(28.0),
+                    padding: USides::all(24.0),
                 }
                 UBorder {
                     color: Color::srgb(0.18, 0.22, 0.30),
@@ -88,7 +88,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Column,
-                    gap: 24.0,
+                    gap: 20.0,
                 }
                 Children [
                     // Section 1: Buttons Row
@@ -110,22 +110,41 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                         ]
                     ),
 
-                    // Section 2: Badges Row
+                    // Section 2: Badges & Tabs Row
                     (
                         UNode::default()
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
                             align_items: UAlignItems::Center,
-                            gap: 10.0,
+                            justify_content: UJustifyContent::SpaceBetween,
                         }
                         Children [
-                            (luma_badge("INFO", BadgeVariant::Info, font.clone())),
-                            (luma_badge("SUCCESS", BadgeVariant::Success, font.clone())),
-                            (luma_badge("WARNING", BadgeVariant::Warning, font.clone())),
-                            (luma_badge("DANGER", BadgeVariant::Danger, font.clone())),
-                            (luma_badge("NEUTRAL", BadgeVariant::Neutral, font.clone())),
-                            (luma_badge_with_icon(Icon::CHECK, "VERIFIED", BadgeVariant::Success, font.clone(), icon_font.clone()))
+                            // Badges
+                            (
+                                UNode::default()
+                                ULayout {
+                                    display: UDisplay::Flex,
+                                    flex_direction: UFlexDirection::Row,
+                                    align_items: UAlignItems::Center,
+                                    gap: 8.0,
+                                }
+                                Children [
+                                    (luma_badge("INFO", BadgeVariant::Info, font.clone())),
+                                    (luma_badge("SUCCESS", BadgeVariant::Success, font.clone())),
+                                    (luma_badge("WARNING", BadgeVariant::Warning, font.clone())),
+                                    (luma_badge("DANGER", BadgeVariant::Danger, font.clone())),
+                                    (luma_badge_with_icon(Icon::CHECK, "VERIFIED", BadgeVariant::Success, font.clone(), icon_font.clone()))
+                                ]
+                            ),
+                            // Tabs
+                            (
+                                luma_tab_list((
+                                    luma_tab_trigger("demo", "overview", "Overview", true, font.clone()),
+                                    luma_tab_trigger("demo", "analytics", "Analytics", false, font.clone()),
+                                    luma_tab_trigger("demo", "settings", "Settings", false, font.clone())
+                                ))
+                            )
                         ]
                     ),
 
@@ -135,7 +154,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
-                            gap: 36.0,
+                            gap: 32.0,
                             align_items: UAlignItems::Center,
                         }
                         Children [
@@ -145,7 +164,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Column,
-                                    gap: 12.0,
+                                    gap: 10.0,
                                 }
                                 Children [
                                     (luma_toggle_with_label("Enable Bloom", true, font.clone())),
@@ -159,7 +178,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Column,
-                                    gap: 12.0,
+                                    gap: 10.0,
                                 }
                                 Children [
                                     (luma_checkbox("Spatial Audio", true, font.clone(), icon_font.clone())),
@@ -173,7 +192,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Column,
-                                    gap: 12.0,
+                                    gap: 10.0,
                                 }
                                 Children [
                                     (luma_radio("quality", "low", "Low", false, font.clone())),
@@ -184,52 +203,92 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                         ]
                     ),
 
-                    // Section 4: Sliders and Progress Bars
+                    // Section 4: Sliders, Progress Bars, and Avatars Row
                     (
                         UNode::default()
                         ULayout {
                             display: UDisplay::Flex,
-                            flex_direction: UFlexDirection::Column,
-                            gap: 14.0,
+                            flex_direction: UFlexDirection::Row,
+                            justify_content: UJustifyContent::SpaceBetween,
+                            align_items: UAlignItems::Center,
                         }
                         Children [
+                            // Sliders & Progress
                             (
                                 UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
-                                    flex_direction: UFlexDirection::Row,
-                                    align_items: UAlignItems::Center,
-                                    gap: 16.0,
+                                    flex_direction: UFlexDirection::Column,
+                                    gap: 12.0,
                                 }
                                 Children [
-                                    (UText {
-                                        text: { "Volume:".to_string() },
-                                        font_size: 14.0,
-                                        font: { font.clone() },
-                                        color: Color::srgb(0.70, 0.75, 0.85),
-                                    }),
-                                    (luma_slider(70.0, 0.0, 100.0, 260.0))
+                                    (
+                                        UNode::default()
+                                        ULayout {
+                                            display: UDisplay::Flex,
+                                            flex_direction: UFlexDirection::Row,
+                                            align_items: UAlignItems::Center,
+                                            gap: 16.0,
+                                        }
+                                        Children [
+                                            (UText {
+                                                text: { "Volume:".to_string() },
+                                                font_size: 13.0,
+                                                font: { font.clone() },
+                                                color: Color::srgb(0.70, 0.75, 0.85),
+                                            }),
+                                            (luma_slider(70.0, 0.0, 100.0, 240.0))
+                                        ]
+                                    ),
+                                    (
+                                        UNode::default()
+                                        ULayout {
+                                            display: UDisplay::Flex,
+                                            flex_direction: UFlexDirection::Row,
+                                            align_items: UAlignItems::Center,
+                                            gap: 16.0,
+                                        }
+                                        Children [
+                                            (UText {
+                                                text: { "Download:".to_string() },
+                                                font_size: 13.0,
+                                                font: { font.clone() },
+                                                color: Color::srgb(0.70, 0.75, 0.85),
+                                            }),
+                                            (luma_progress_bar(0.65, UVal::Px(240.0), 8.0, ProgressVariant::Success))
+                                        ]
+                                    )
                                 ]
                             ),
+
+                            // Avatars & Tooltip
                             (
                                 UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Row,
                                     align_items: UAlignItems::Center,
-                                    gap: 16.0,
+                                    gap: 14.0,
                                 }
                                 Children [
-                                    (UText {
-                                        text: { "Download:".to_string() },
-                                        font_size: 14.0,
-                                        font: { font.clone() },
-                                        color: Color::srgb(0.70, 0.75, 0.85),
-                                    }),
-                                    (luma_progress_bar(0.65, UVal::Px(260.0), 8.0, ProgressVariant::Success))
+                                    (luma_avatar_with_status("AH", AvatarSize::Medium, AvatarStatus::Online, font.clone())),
+                                    (luma_avatar_with_status("JD", AvatarSize::Medium, AvatarStatus::Busy, font.clone())),
+                                    (luma_avatar("AI", AvatarSize::Medium, font.clone())),
+                                    (luma_tooltip("Online & Active", font.clone()))
                                 ]
                             )
                         ]
+                    ),
+
+                    // Section 5: Alert Banner Callout
+                    (
+                        luma_alert(
+                            "Keyboard Navigation Enabled",
+                            "All widgets support Enter, Space, and Tab key activation. Sliders navigate with arrow keys.",
+                            AlertVariant::Info,
+                            font.clone(),
+                            icon_font.clone(),
+                        )
                     )
                 ]
             )

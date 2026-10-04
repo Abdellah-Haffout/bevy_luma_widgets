@@ -13,7 +13,16 @@
 //! - Cards (elevated SDF surfaces with borders and shadows)
 //! - Modals / Dialogs (centered dialogs with backdrop)
 //! - Radio Buttons (grouped single-choice selection)
+//! - Tabs (tabbed content switching)
+//! - Accordions (collapsible disclosure panels)
+//! - Alerts (contextual status banners)
+//! - Avatars (user initials & presence status)
+//! - Skeletons (animated loading placeholder pulse)
+//! - Tooltips (floating description bubbles)
 
+pub mod accordion;
+pub mod alert;
+pub mod avatar;
 pub mod badge;
 pub mod button;
 pub mod card;
@@ -23,9 +32,12 @@ pub mod input;
 pub mod modal;
 pub mod progress;
 pub mod radio;
+pub mod skeleton;
 pub mod slider;
+pub mod tabs;
 pub mod theme;
 pub mod toggle;
+pub mod tooltip;
 
 use bevy::prelude::*;
 pub use bevy_luma;
@@ -35,8 +47,9 @@ pub mod prelude {
     pub use bevy_luma::prelude::*;
 
     pub use crate::{
-        badge::*, button::*, card::*, checkbox::*, divider::*, input::*, modal::*, progress::*,
-        radio::*, slider::*, theme::*, toggle::*, LumaWidgetsPlugin,
+        accordion::*, alert::*, avatar::*, badge::*, button::*, card::*, checkbox::*, divider::*,
+        input::*, modal::*, progress::*, radio::*, skeleton::*, slider::*, tabs::*, theme::*,
+        toggle::*, tooltip::*, LumaWidgetsPlugin,
     };
 }
 
@@ -57,6 +70,9 @@ impl Plugin for LumaWidgetsPlugin {
                 slider::LumaSliderPlugin,
                 progress::LumaProgressPlugin,
                 radio::LumaRadioPlugin,
+                tabs::LumaTabsPlugin,
+                accordion::LumaAccordionPlugin,
+                skeleton::LumaSkeletonPlugin,
             ));
     }
 }
@@ -157,5 +173,36 @@ mod tests {
         let checkbox = LumaCheckbox::default();
         assert!(!checkbox.is_checked);
         assert!(!checkbox.disabled);
+    }
+
+    #[test]
+    fn alert_variant_colors() {
+        let (info_bg, _, _, info_icon) = AlertVariant::Info.colors();
+        assert_eq!(info_icon, Icon::INFO);
+        assert_eq!(info_bg, Color::srgba(0.10, 0.25, 0.50, 0.25));
+
+        let (_, _, _, success_icon) = AlertVariant::Success.colors();
+        assert_eq!(success_icon, Icon::CIRCLE_CHECK_BIG);
+    }
+
+    #[test]
+    fn avatar_dimensions() {
+        assert_eq!(AvatarSize::Small.size_px(), 32.0);
+        assert_eq!(AvatarSize::Medium.size_px(), 40.0);
+        assert_eq!(AvatarSize::Large.size_px(), 48.0);
+        assert_eq!(AvatarStatus::Online.color(), Color::srgb(0.15, 0.75, 0.40));
+    }
+
+    #[test]
+    fn tabs_default_state() {
+        let tabs = LumaTabs::default();
+        assert_eq!(tabs.group, "");
+        assert_eq!(tabs.active, "");
+    }
+
+    #[test]
+    fn accordion_default_state() {
+        let acc = LumaAccordionItem::default();
+        assert!(!acc.is_expanded);
     }
 }

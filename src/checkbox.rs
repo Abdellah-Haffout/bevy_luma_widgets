@@ -112,13 +112,17 @@ pub fn luma_checkbox(
     }
 }
 
-fn on_checkbox_click(
-    trigger: On<Pointer<Click>>,
-    mut commands: Commands,
-    mut query: Query<(&mut LumaCheckbox, &mut UNode, &mut UBorder, Option<&Children>)>,
-    mut checkmark_query: Query<&mut UText, With<LumaCheckmark>>,
+fn toggle_checkbox(
+    entity: Entity,
+    commands: &mut Commands,
+    query: &mut Query<(
+        &mut LumaCheckbox,
+        &mut UNode,
+        &mut UBorder,
+        Option<&Children>,
+    )>,
+    checkmark_query: &mut Query<&mut UText, With<LumaCheckmark>>,
 ) {
-    let entity = trigger.entity.entity();
     if let Ok((mut checkbox, mut node, mut border, children)) = query.get_mut(entity) {
         if checkbox.disabled {
             return;
@@ -147,12 +151,41 @@ fn on_checkbox_click(
     }
 }
 
+fn on_checkbox_click(
+    trigger: On<Pointer<Click>>,
+    mut commands: Commands,
+    mut query: Query<(
+        &mut LumaCheckbox,
+        &mut UNode,
+        &mut UBorder,
+        Option<&Children>,
+    )>,
+    mut checkmark_query: Query<&mut UText, With<LumaCheckmark>>,
+) {
+    toggle_checkbox(trigger.entity.entity(), &mut commands, &mut query, &mut checkmark_query);
+}
+
+fn on_checkbox_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    mut query: Query<(
+        &mut LumaCheckbox,
+        &mut UNode,
+        &mut UBorder,
+        Option<&Children>,
+    )>,
+    mut checkmark_query: Query<&mut UText, With<LumaCheckmark>>,
+) {
+    toggle_checkbox(trigger.entity, &mut commands, &mut query, &mut checkmark_query);
+}
+
 pub struct LumaCheckboxPlugin;
 
 impl Plugin for LumaCheckboxPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaCheckbox>()
             .register_type::<LumaCheckmark>()
-            .add_observer(on_checkbox_click);
+            .add_observer(on_checkbox_click)
+            .add_observer(on_checkbox_activate);
     }
 }

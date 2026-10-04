@@ -127,13 +127,12 @@ pub fn luma_toggle_with_label(
     }
 }
 
-fn on_toggle_click(
-    trigger: On<Pointer<Click>>,
-    mut commands: Commands,
-    mut query: Query<(&mut LumaToggle, &mut UNode, &mut UBorder, Option<&Children>)>,
-    mut knob_query: Query<&mut LumaToggleKnob>,
+fn toggle_state(
+    entity: Entity,
+    commands: &mut Commands,
+    query: &mut Query<(&mut LumaToggle, &mut UNode, &mut UBorder, Option<&Children>)>,
+    knob_query: &mut Query<&mut LumaToggleKnob>,
 ) {
-    let entity = trigger.entity.entity();
     if let Ok((mut toggle, mut node, mut border, children)) = query.get_mut(entity) {
         if toggle.disabled {
             return;
@@ -162,6 +161,24 @@ fn on_toggle_click(
     }
 }
 
+fn on_toggle_click(
+    trigger: On<Pointer<Click>>,
+    mut commands: Commands,
+    mut query: Query<(&mut LumaToggle, &mut UNode, &mut UBorder, Option<&Children>)>,
+    mut knob_query: Query<&mut LumaToggleKnob>,
+) {
+    toggle_state(trigger.entity.entity(), &mut commands, &mut query, &mut knob_query);
+}
+
+fn on_toggle_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    mut query: Query<(&mut LumaToggle, &mut UNode, &mut UBorder, Option<&Children>)>,
+    mut knob_query: Query<&mut LumaToggleKnob>,
+) {
+    toggle_state(trigger.entity, &mut commands, &mut query, &mut knob_query);
+}
+
 fn toggle_animation_system(
     time: Res<Time>,
     mut knob_query: Query<(&mut LumaToggleKnob, &mut USelf)>,
@@ -184,6 +201,7 @@ impl Plugin for LumaTogglePlugin {
         app.register_type::<LumaToggle>()
             .register_type::<LumaToggleKnob>()
             .add_observer(on_toggle_click)
+            .add_observer(on_toggle_activate)
             .add_systems(Update, toggle_animation_system);
     }
 }
