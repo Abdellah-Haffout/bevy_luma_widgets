@@ -89,6 +89,7 @@ pub fn luma_checkbox(
     let label = label.into();
 
     bsn! {
+        UNode::default()
         ULayout {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Row,

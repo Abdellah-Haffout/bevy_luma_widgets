@@ -103,12 +103,12 @@ pub fn luma_slider(value: f32, min: f32, max: f32, width: f32) -> impl Scene {
                     width: UVal::Percent(1.0),
                     height: UVal::Px(6.0),
                     background_color: Color::srgb(0.18, 0.22, 0.28),
-                    border_radius: UCornerRadius::all(999.0),
+                    border_radius: UCornerRadius::all(3.0),
                 }
                 UBorder {
                     color: Color::srgb(0.25, 0.30, 0.38),
                     width: 1.0,
-                    radius: UCornerRadius::all(999.0),
+                    radius: UCornerRadius::all(3.0),
                 }
                 ULayout {
                     display: UDisplay::Flex,
@@ -122,7 +122,7 @@ pub fn luma_slider(value: f32, min: f32, max: f32, width: f32) -> impl Scene {
                             width: UVal::Percent(ratio),
                             height: UVal::Percent(1.0),
                             background_color: Color::srgb(0.20, 0.45, 0.90),
-                            border_radius: UCornerRadius::all(999.0),
+                            border_radius: UCornerRadius::all(3.0),
                         }
                     )
                 ]
@@ -134,12 +134,12 @@ pub fn luma_slider(value: f32, min: f32, max: f32, width: f32) -> impl Scene {
                     width: UVal::Px(THUMB_SIZE),
                     height: UVal::Px(THUMB_SIZE),
                     background_color: Color::WHITE,
-                    border_radius: UCornerRadius::all(999.0),
+                    border_radius: UCornerRadius::all(8.0),
                 }
                 UBorder {
                     color: Color::srgb(0.20, 0.45, 0.90),
                     width: 2.0,
-                    radius: UCornerRadius::all(999.0),
+                    radius: UCornerRadius::all(8.0),
                 }
                 USelf {
                     position_type: UPositionType::Absolute,

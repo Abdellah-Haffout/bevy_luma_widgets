@@ -60,14 +60,14 @@ fn settings_scene(theme: &Theme) -> impl Scene {
                 Children [
                     // Dialog Header
                     (
+                        UNode {
+                            width: UVal::Percent(1.0),
+                        }
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
                             justify_content: UJustifyContent::SpaceBetween,
                             align_items: UAlignItems::Center,
-                        }
-                        UNode {
-                            width: UVal::Percent(1.0),
                         }
                         Children [
                             (UText {
@@ -84,6 +84,9 @@ fn settings_scene(theme: &Theme) -> impl Scene {
 
                     // Setting 1: Master Volume
                     (
+                        UNode {
+                            width: UVal::Percent(1.0),
+                        }
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Column,
@@ -102,6 +105,9 @@ fn settings_scene(theme: &Theme) -> impl Scene {
 
                     // Setting 2: Graphics Quality
                     (
+                        UNode {
+                            width: UVal::Percent(1.0),
+                        }
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Column,
@@ -115,6 +121,7 @@ fn settings_scene(theme: &Theme) -> impl Scene {
                                 color: Color::srgb(0.85, 0.88, 0.95),
                             }),
                             (
+                                UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Row,
@@ -131,6 +138,9 @@ fn settings_scene(theme: &Theme) -> impl Scene {
 
                     // Setting 3: Toggles
                     (
+                        UNode {
+                            width: UVal::Percent(1.0),
+                        }
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Column,
@@ -147,14 +157,14 @@ fn settings_scene(theme: &Theme) -> impl Scene {
 
                     // Dialog Actions Footer
                     (
+                        UNode {
+                            width: UVal::Percent(1.0),
+                        }
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
                             justify_content: UJustifyContent::End,
                             gap: 12.0,
-                        }
-                        UNode {
-                            width: UVal::Percent(1.0),
                         }
                         Children [
                             (

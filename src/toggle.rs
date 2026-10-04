@@ -58,13 +58,13 @@ pub fn luma_toggle(is_checked: bool) -> impl Scene {
             width: UVal::Px(TRACK_WIDTH),
             height: UVal::Px(TRACK_HEIGHT),
             background_color: bg,
-            border_radius: UCornerRadius::all(999.0),
+            border_radius: UCornerRadius::all(12.0),
             padding: USides::all(2.0),
         }
         UBorder {
             color: border,
             width: 1.0,
-            radius: UCornerRadius::all(999.0),
+            radius: UCornerRadius::all(12.0),
         }
         UInteraction::default()
         UFocusable::new()
@@ -84,7 +84,7 @@ pub fn luma_toggle(is_checked: bool) -> impl Scene {
                     width: UVal::Px(KNOB_SIZE),
                     height: UVal::Px(KNOB_SIZE),
                     background_color: Color::WHITE,
-                    border_radius: UCornerRadius::all(999.0),
+                    border_radius: UCornerRadius::all(10.0),
                 }
                 USelf {
                     position_type: UPositionType::Relative,
@@ -104,6 +104,7 @@ pub fn luma_toggle_with_label(
     let label = label.into();
 
     bsn! {
+        UNode::default()
         ULayout {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Row,

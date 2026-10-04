@@ -61,12 +61,12 @@ pub fn luma_radio_circle(
             width: UVal::Px(20.0),
             height: UVal::Px(20.0),
             background_color: CIRCLE_BG,
-            border_radius: UCornerRadius::all(999.0),
+            border_radius: UCornerRadius::all(10.0),
         }
         UBorder {
             color: border_color,
             width: 1.5,
-            radius: UCornerRadius::all(999.0),
+            radius: UCornerRadius::all(10.0),
         }
         UInteraction::default()
         UFocusable::new()
@@ -83,7 +83,7 @@ pub fn luma_radio_circle(
                     width: UVal::Px(10.0),
                     height: UVal::Px(10.0),
                     background_color: dot_color,
-                    border_radius: UCornerRadius::all(999.0),
+                    border_radius: UCornerRadius::all(5.0),
                 }
             )
         ]
@@ -101,6 +101,7 @@ pub fn luma_radio(
     let label = label.into();
 
     bsn! {
+        UNode::default()
         ULayout {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Row,

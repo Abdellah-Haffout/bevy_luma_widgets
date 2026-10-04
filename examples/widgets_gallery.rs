@@ -38,12 +38,13 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
         ULayout {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Column,
-            gap: 24.0,
+            gap: 20.0,
             align_items: UAlignItems::Center,
         }
         Children [
             // Gallery Header
             (
+                UNode::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Column,
@@ -71,7 +72,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                 luma_divider_with_label("COMPONENTS", font.clone())
             ),
 
-            // Main Content Grid / Card
+            // Main Content Card
             (
                 UNode {
                     width: UVal::Px(880.0),
@@ -90,8 +91,9 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                     gap: 24.0,
                 }
                 Children [
-                    // Section 1: Buttons
+                    // Section 1: Buttons Row
                     (
+                        UNode::default()
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
@@ -108,8 +110,9 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                         ]
                     ),
 
-                    // Section 2: Badges
+                    // Section 2: Badges Row
                     (
+                        UNode::default()
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
@@ -128,6 +131,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
 
                     // Section 3: Form Controls (Toggles, Checkboxes, Radios)
                     (
+                        UNode::default()
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
@@ -135,8 +139,9 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                             align_items: UAlignItems::Center,
                         }
                         Children [
-                            // Toggles
+                            // Toggles column
                             (
+                                UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Column,
@@ -148,8 +153,9 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                                 ]
                             ),
 
-                            // Checkboxes
+                            // Checkboxes column
                             (
+                                UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Column,
@@ -161,8 +167,9 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                                 ]
                             ),
 
-                            // Radio Buttons
+                            // Radio Buttons column
                             (
+                                UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Column,
@@ -177,8 +184,9 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                         ]
                     ),
 
-                    // Section 4: Sliders and Progress
+                    // Section 4: Sliders and Progress Bars
                     (
+                        UNode::default()
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Column,
@@ -186,6 +194,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                         }
                         Children [
                             (
+                                UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Row,
@@ -203,6 +212,7 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                                 ]
                             ),
                             (
+                                UNode::default()
                                 ULayout {
                                     display: UDisplay::Flex,
                                     flex_direction: UFlexDirection::Row,

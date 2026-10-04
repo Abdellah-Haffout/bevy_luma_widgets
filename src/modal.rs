@@ -86,14 +86,14 @@ pub fn luma_modal_dialog(
                     }),
                     // Actions row
                     (
+                        UNode {
+                            width: UVal::Percent(1.0),
+                        }
                         ULayout {
                             display: UDisplay::Flex,
                             flex_direction: UFlexDirection::Row,
                             justify_content: UJustifyContent::End,
                             gap: 10.0,
-                        }
-                        UNode {
-                            width: UVal::Percent(1.0),
                         }
                         Children [
                             (

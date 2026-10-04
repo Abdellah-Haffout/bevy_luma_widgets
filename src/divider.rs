@@ -64,14 +64,14 @@ pub fn luma_divider_with_label(label: impl Into<String>, font: Handle<Font>) -> 
     let label = label.into();
 
     bsn! {
+        UNode {
+            width: UVal::Percent(1.0),
+        }
         ULayout {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Row,
             align_items: UAlignItems::Center,
             gap: 12.0,
-        }
-        UNode {
-            width: UVal::Percent(1.0),
         }
         Children [
             (

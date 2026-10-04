@@ -53,6 +53,7 @@ pub fn luma_progress_bar(
 ) -> impl Scene {
     let clamped = value.clamp(0.0, 1.0);
     let fill_color = variant.color();
+    let radius = height * 0.5;
 
     bsn! {
         LumaProgressBar {
@@ -63,12 +64,12 @@ pub fn luma_progress_bar(
             width,
             height: UVal::Px(height),
             background_color: Color::srgb(0.15, 0.18, 0.24),
-            border_radius: UCornerRadius::all(999.0),
+            border_radius: { UCornerRadius::all(radius) },
         }
         UBorder {
             color: Color::srgb(0.22, 0.26, 0.34),
             width: 1.0,
-            radius: UCornerRadius::all(999.0),
+            radius: { UCornerRadius::all(radius) },
         }
         ULayout {
             display: UDisplay::Flex,
@@ -81,7 +82,7 @@ pub fn luma_progress_bar(
                     width: UVal::Percent(clamped),
                     height: UVal::Percent(1.0),
                     background_color: fill_color,
-                    border_radius: UCornerRadius::all(999.0),
+                    border_radius: { UCornerRadius::all(radius) },
                 }
             )
         ]

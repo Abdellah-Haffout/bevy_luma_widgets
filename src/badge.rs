@@ -66,13 +66,13 @@ pub fn luma_badge(
         LumaBadge { variant }
         UNode {
             background_color: bg,
-            border_radius: UCornerRadius::all(999.0),
+            border_radius: UCornerRadius::all(8.0),
             padding: USides::axes(8.0, 3.0),
         }
         UBorder {
             color: border_color,
             width: 1.0,
-            radius: UCornerRadius::all(999.0),
+            radius: UCornerRadius::all(8.0),
         }
         ULayout {
             display: UDisplay::Flex,
@@ -106,13 +106,13 @@ pub fn luma_badge_with_icon(
         LumaBadge { variant }
         UNode {
             background_color: bg,
-            border_radius: UCornerRadius::all(999.0),
+            border_radius: UCornerRadius::all(8.0),
             padding: USides::axes(8.0, 3.0),
         }
         UBorder {
             color: border_color,
             width: 1.0,
-            radius: UCornerRadius::all(999.0),
+            radius: UCornerRadius::all(8.0),
         }
         ULayout {
             display: UDisplay::Flex,
