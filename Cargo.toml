@@ -1,0 +1,59 @@
+[package]
+name = "bevy_luma_widgets"
+version = "0.1.0"
+edition = "2024"
+description = "A modern, high-level widget component suite for the bevy_luma UI framework in Bevy."
+authors = ["abdellah-haffout <abdellahhaffout9@gmail.com>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/Abdellah-Haffout/bevy_luma_widgets"
+homepage = "https://github.com/Abdellah-Haffout/bevy_luma_widgets"
+keywords = ["bevy", "ui", "widgets", "components", "gui"]
+categories = ["game-development", "gui"]
+include = [
+    "/Cargo.toml",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+    "/README.md",
+    "/src/**",
+    "/examples/**",
+]
+
+[dependencies]
+bevy = { version = "0.19.0", default-features = false, features = [
+    "default_app",
+    "std",
+    "android-native-activity",
+    "bevy_gilrs",
+    "bevy_winit",
+    "default_font",
+    "multi_threaded",
+    "webgl2",
+    "x11",
+    "wayland",
+    "sysinfo_plugin",
+    "common_api",
+    "bevy_render",
+    "bevy_core_pipeline",
+    "bevy_post_process",
+    "tonemapping_luts",
+    "bevy_sprite",
+    "bevy_sprite_render",
+    "bevy_gizmos_render",
+    "bevy_pbr",
+    "bevy_picking",
+    "mesh_picking",
+    "zstd_rust",
+    "keyboard",
+    "mouse",
+    "bevy_scene",
+] }
+bevy_luma = { version = "0.1.0", path = "../bevy_luma" }
+
+[[example]]
+name = "widgets_gallery"
+path = "examples/widgets_gallery.rs"
+
+[[example]]
+name = "settings_dialog"
+path = "examples/settings_dialog.rs"
