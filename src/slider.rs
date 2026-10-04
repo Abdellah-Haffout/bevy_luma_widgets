@@ -67,13 +67,27 @@ pub struct SliderChanged {
 }
 
 const THUMB_SIZE: f32 = 16.0;
+const SLIDER_HEIGHT: f32 = 24.0;
+const TRACK_HEIGHT: f32 = 6.0;
+const TRACK_RADIUS: f32 = 3.0;
+const THUMB_RADIUS: f32 = 8.0;
 
 /// Creates a horizontal slider scene.
+#[allow(deprecated)]
 pub fn luma_slider(value: f32, min: f32, max: f32, width: f32) -> impl Scene {
     let range = (max - min).max(0.001);
     let ratio = ((value - min) / range).clamp(0.0, 1.0);
     let thumb_travel = (width - THUMB_SIZE).max(0.0);
     let thumb_offset = ratio * thumb_travel;
+    let track_top = (SLIDER_HEIGHT - TRACK_HEIGHT) * 0.5;
+    let thumb_top = (SLIDER_HEIGHT - THUMB_SIZE) * 0.5;
+    let fill_width = if ratio <= 0.001 {
+        0.0
+    } else if ratio >= 0.999 {
+        width
+    } else {
+        thumb_offset + THUMB_SIZE * 0.5
+    };
 
     bsn! {
         LumaSlider {
@@ -86,64 +100,68 @@ pub fn luma_slider(value: f32, min: f32, max: f32, width: f32) -> impl Scene {
         }
         UNode {
             width: UVal::Px(width),
-            height: UVal::Px(24.0),
+            height: UVal::Px(SLIDER_HEIGHT),
             background_color: Color::NONE,
         }
         UInteraction::default()
         UFocusable::new()
         UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-        ULayout {
-            display: UDisplay::Flex,
-            align_items: UAlignItems::Center,
-        }
         Children [
-            // Track bar
+            // 1. Inactive Track background bar
             (
                 UNode {
-                    width: UVal::Percent(1.0),
-                    height: UVal::Px(6.0),
+                    width: UVal::Px(width),
+                    height: UVal::Px(TRACK_HEIGHT),
                     background_color: Color::srgb(0.18, 0.22, 0.28),
-                    border_radius: UCornerRadius::all(3.0),
+                    border_radius: UCornerRadius::all(TRACK_RADIUS),
                 }
                 UBorder {
                     color: Color::srgb(0.25, 0.30, 0.38),
                     width: 1.0,
-                    radius: UCornerRadius::all(3.0),
+                    radius: UCornerRadius::all(TRACK_RADIUS),
                 }
-                ULayout {
-                    display: UDisplay::Flex,
-                    align_items: UAlignItems::Center,
+                USelf {
+                    position_type: UPositionType::Absolute,
+                    left: { UVal::Px(0.0) },
+                    top: { UVal::Px(track_top) },
+                    order: 0,
                 }
-                Children [
-                    // Active Fill
-                    (
-                        LumaSliderFill
-                        UNode {
-                            width: UVal::Percent(ratio),
-                            height: UVal::Percent(1.0),
-                            background_color: Color::srgb(0.20, 0.45, 0.90),
-                            border_radius: UCornerRadius::all(3.0),
-                        }
-                    )
-                ]
             ),
-            // Draggable Thumb Knob
+            // 2. Active Fill bar
+            (
+                LumaSliderFill
+                UNode {
+                    width: { UVal::Px(fill_width) },
+                    height: UVal::Px(TRACK_HEIGHT),
+                    background_color: Color::srgb(0.20, 0.45, 0.90),
+                    border_radius: UCornerRadius::all(TRACK_RADIUS),
+                }
+                USelf {
+                    position_type: UPositionType::Absolute,
+                    left: { UVal::Px(0.0) },
+                    top: { UVal::Px(track_top) },
+                    order: 1,
+                }
+            ),
+            // 3. Draggable Thumb Knob
             (
                 LumaSliderThumb
                 UNode {
                     width: UVal::Px(THUMB_SIZE),
                     height: UVal::Px(THUMB_SIZE),
                     background_color: Color::WHITE,
-                    border_radius: UCornerRadius::all(8.0),
+                    border_radius: UCornerRadius::all(THUMB_RADIUS),
                 }
                 UBorder {
                     color: Color::srgb(0.20, 0.45, 0.90),
                     width: 2.0,
-                    radius: UCornerRadius::all(8.0),
+                    radius: UCornerRadius::all(THUMB_RADIUS),
                 }
                 USelf {
                     position_type: UPositionType::Absolute,
                     left: { UVal::Px(thumb_offset) },
+                    top: { UVal::Px(thumb_top) },
+                    order: 2,
                 }
             )
         ]
@@ -216,20 +234,31 @@ fn slider_sync_system(
         let ratio = slider.ratio();
         let thumb_travel = (slider.width - THUMB_SIZE).max(0.0);
         let thumb_offset = ratio * thumb_travel;
+        let fill_width = if ratio <= 0.001 {
+            0.0
+        } else if ratio >= 0.999 {
+            slider.width
+        } else {
+            thumb_offset + THUMB_SIZE * 0.5
+        };
 
-        // Traverse descendants to update fill and thumb
         if let Ok(children) = children_query.get(slider_entity) {
             for child in children.iter() {
-                // Check if this child has the thumb
+                // Update thumb knob position
                 if let Ok(mut uself) = thumb_query.get_mut(child) {
                     uself.left = UVal::Px(thumb_offset);
                 }
 
-                // Check grand-children for fill
+                // Update active fill bar width (direct child)
+                if let Ok(mut fill_node) = fill_query.get_mut(child) {
+                    fill_node.width = UVal::Px(fill_width);
+                }
+
+                // Also check grand-children for backward compatibility
                 if let Ok(sub_children) = children_query.get(child) {
                     for sub_child in sub_children.iter() {
                         if let Ok(mut fill_node) = fill_query.get_mut(sub_child) {
-                            fill_node.width = UVal::Percent(ratio);
+                            fill_node.width = UVal::Px(fill_width);
                         }
                     }
                 }
