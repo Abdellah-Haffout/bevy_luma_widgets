@@ -126,11 +126,17 @@ pub fn luma_radio(
 fn select_radio(
     target_entity: Entity,
     commands: &mut Commands,
-    all_radios: &mut Query<(Entity, &mut LumaRadio, &mut UBorder, Option<&Children>)>,
+    all_radios: &mut Query<(
+        Entity,
+        &mut LumaRadio,
+        &mut UBorder,
+        Option<&Children>,
+        Option<&mut UFocusVisual>,
+    )>,
     dot_query: &mut Query<&mut UNode, With<LumaRadioDot>>,
 ) {
     // Check if target entity is a radio
-    let Ok((_, target_radio, _, _)) = all_radios.get(target_entity) else {
+    let Ok((_, target_radio, _, _, _)) = all_radios.get(target_entity) else {
         return;
     };
 
@@ -142,12 +148,22 @@ fn select_radio(
     let selected_value = target_radio.value.clone();
 
     // Synchronize the entire group: select target, deselect others in same group
-    for (entity, mut radio, mut border, children) in all_radios.iter_mut() {
+    for (entity, mut radio, mut border, children, mut visual_opt) in all_radios.iter_mut() {
         if radio.group == target_group {
             let is_now_selected = entity == target_entity;
             radio.selected = is_now_selected;
 
-            border.color = if is_now_selected { SELECTED_COLOR } else { UNSELECTED_BORDER };
+            let target_border = if is_now_selected { SELECTED_COLOR } else { UNSELECTED_BORDER };
+
+            if let Some(ref mut visual) = visual_opt {
+                if visual.is_captured() {
+                    visual.set_original_border_color(target_border);
+                } else {
+                    border.color = target_border;
+                }
+            } else {
+                border.color = target_border;
+            }
 
             if let Some(children) = children {
                 for child in children.iter() {
@@ -169,7 +185,13 @@ fn select_radio(
 fn on_radio_click(
     trigger: On<Pointer<Click>>,
     mut commands: Commands,
-    mut all_radios: Query<(Entity, &mut LumaRadio, &mut UBorder, Option<&Children>)>,
+    mut all_radios: Query<(
+        Entity,
+        &mut LumaRadio,
+        &mut UBorder,
+        Option<&Children>,
+        Option<&mut UFocusVisual>,
+    )>,
     mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
 ) {
     select_radio(trigger.entity.entity(), &mut commands, &mut all_radios, &mut dot_query);
@@ -178,7 +200,13 @@ fn on_radio_click(
 fn on_radio_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
-    mut all_radios: Query<(Entity, &mut LumaRadio, &mut UBorder, Option<&Children>)>,
+    mut all_radios: Query<(
+        Entity,
+        &mut LumaRadio,
+        &mut UBorder,
+        Option<&Children>,
+        Option<&mut UFocusVisual>,
+    )>,
     mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
 ) {
     select_radio(trigger.entity, &mut commands, &mut all_radios, &mut dot_query);

@@ -130,10 +130,16 @@ pub fn luma_toggle_with_label(
 fn toggle_state(
     entity: Entity,
     commands: &mut Commands,
-    query: &mut Query<(&mut LumaToggle, &mut UNode, &mut UBorder, Option<&Children>)>,
+    query: &mut Query<(
+        &mut LumaToggle,
+        &mut UNode,
+        &mut UBorder,
+        Option<&Children>,
+        Option<&mut UFocusVisual>,
+    )>,
     knob_query: &mut Query<&mut LumaToggleKnob>,
 ) {
-    if let Ok((mut toggle, mut node, mut border, children)) = query.get_mut(entity) {
+    if let Ok((mut toggle, mut node, mut border, children, mut visual_opt)) = query.get_mut(entity) {
         if toggle.disabled {
             return;
         }
@@ -142,7 +148,17 @@ fn toggle_state(
         let is_checked = toggle.is_checked;
 
         node.background_color = if is_checked { CHECKED_BG } else { UNCHECKED_BG };
-        border.color = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+        let new_border = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+
+        if let Some(ref mut visual) = visual_opt {
+            if visual.is_captured() {
+                visual.set_original_border_color(new_border);
+            } else {
+                border.color = new_border;
+            }
+        } else {
+            border.color = new_border;
+        }
 
         let target_offset = if is_checked { TRAVEL_DISTANCE } else { 0.0 };
 
@@ -164,7 +180,13 @@ fn toggle_state(
 fn on_toggle_click(
     trigger: On<Pointer<Click>>,
     mut commands: Commands,
-    mut query: Query<(&mut LumaToggle, &mut UNode, &mut UBorder, Option<&Children>)>,
+    mut query: Query<(
+        &mut LumaToggle,
+        &mut UNode,
+        &mut UBorder,
+        Option<&Children>,
+        Option<&mut UFocusVisual>,
+    )>,
     mut knob_query: Query<&mut LumaToggleKnob>,
 ) {
     toggle_state(trigger.entity.entity(), &mut commands, &mut query, &mut knob_query);
@@ -173,7 +195,13 @@ fn on_toggle_click(
 fn on_toggle_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
-    mut query: Query<(&mut LumaToggle, &mut UNode, &mut UBorder, Option<&Children>)>,
+    mut query: Query<(
+        &mut LumaToggle,
+        &mut UNode,
+        &mut UBorder,
+        Option<&Children>,
+        Option<&mut UFocusVisual>,
+    )>,
     mut knob_query: Query<&mut LumaToggleKnob>,
 ) {
     toggle_state(trigger.entity, &mut commands, &mut query, &mut knob_query);

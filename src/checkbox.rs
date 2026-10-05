@@ -120,10 +120,11 @@ fn toggle_checkbox(
         &mut UNode,
         &mut UBorder,
         Option<&Children>,
+        Option<&mut UFocusVisual>,
     )>,
     checkmark_query: &mut Query<&mut UText, With<LumaCheckmark>>,
 ) {
-    if let Ok((mut checkbox, mut node, mut border, children)) = query.get_mut(entity) {
+    if let Ok((mut checkbox, mut node, mut border, children, mut visual_opt)) = query.get_mut(entity) {
         if checkbox.disabled {
             return;
         }
@@ -132,7 +133,17 @@ fn toggle_checkbox(
         let is_checked = checkbox.is_checked;
 
         node.background_color = if is_checked { CHECKED_BG } else { UNCHECKED_BG };
-        border.color = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+        let new_border = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+
+        if let Some(ref mut visual) = visual_opt {
+            if visual.is_captured() {
+                visual.set_original_border_color(new_border);
+            } else {
+                border.color = new_border;
+            }
+        } else {
+            border.color = new_border;
+        }
 
         let icon_color = if is_checked { Color::WHITE } else { Color::NONE };
 
@@ -159,6 +170,7 @@ fn on_checkbox_click(
         &mut UNode,
         &mut UBorder,
         Option<&Children>,
+        Option<&mut UFocusVisual>,
     )>,
     mut checkmark_query: Query<&mut UText, With<LumaCheckmark>>,
 ) {
@@ -173,6 +185,7 @@ fn on_checkbox_activate(
         &mut UNode,
         &mut UBorder,
         Option<&Children>,
+        Option<&mut UFocusVisual>,
     )>,
     mut checkmark_query: Query<&mut UText, With<LumaCheckmark>>,
 ) {
