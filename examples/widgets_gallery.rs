@@ -23,7 +23,7 @@ fn setup_gallery(mut commands: Commands, theme: Res<Theme>) {
     commands.spawn_scene(gallery_scene(&theme));
 }
 
-fn gallery_scene(theme: &Theme) -> impl Scene {
+fn gallery_scene(theme: &Theme) -> impl Scene + use<> {
     let font = theme.text.font.inter_regular.clone();
     let icon_font = theme.icon.font.clone();
 
@@ -482,5 +482,81 @@ fn gallery_scene(theme: &Theme) -> impl Scene {
                 ]
             )
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::asset::AssetPlugin;
+    use bevy::camera::NormalizedRenderTarget;
+    use bevy::picking::backend::HitData;
+    use bevy::picking::events::{Click, Pointer, Press, Release};
+    use bevy::picking::pointer::{Location, PointerButton, PointerId};
+    use bevy::text::TextPlugin;
+    use core::time::Duration;
+
+    #[test]
+    fn test_gallery_all_mouse_clicks() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            TextPlugin,
+            bevy::scene::ScenePlugin,
+        ))
+        .add_plugins(LumaWidgetsPlugin);
+
+        app.init_resource::<Theme>();
+        let scene = {
+            let theme = app.world().resource::<Theme>();
+            gallery_scene(theme)
+        };
+        app.world_mut().spawn_scene(scene).unwrap();
+        app.update();
+
+        let all_entities: Vec<Entity> = app.world().iter_entities().map(|e| e.id()).collect();
+
+        let location = Location {
+            target: NormalizedRenderTarget::None { width: 0, height: 0 },
+            position: Vec2::ZERO,
+        };
+        let hit = HitData::new(Entity::PLACEHOLDER, 0.0, None, None);
+
+        for button in [PointerButton::Primary, PointerButton::Secondary] {
+            for &entity in &all_entities {
+                app.world_mut().trigger(Pointer::new(
+                    PointerId::Mouse,
+                    location.clone(),
+                    Press {
+                        button,
+                        hit: hit.clone(),
+                        count: 1,
+                    },
+                    entity,
+                ));
+                app.world_mut().trigger(Pointer::new(
+                    PointerId::Mouse,
+                    location.clone(),
+                    Click {
+                        button,
+                        hit: hit.clone(),
+                        duration: Duration::ZERO,
+                        count: 1,
+                    },
+                    entity,
+                ));
+                app.world_mut().trigger(Pointer::new(
+                    PointerId::Mouse,
+                    location.clone(),
+                    Release {
+                        button,
+                        hit: hit.clone(),
+                    },
+                    entity,
+                ));
+            }
+            app.update();
+        }
     }
 }

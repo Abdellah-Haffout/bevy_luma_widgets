@@ -1,5 +1,6 @@
 //! Color swatch widget for palette selection and color previews.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -182,6 +183,9 @@ fn on_swatch_click(
     mut commands: Commands,
     query: Query<(Entity, &mut LumaSwatch, &mut UBorder)>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     toggle_swatch(trigger.entity.entity(), &mut commands, query);
 }
 

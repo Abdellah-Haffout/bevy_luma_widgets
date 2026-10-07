@@ -1,4 +1,5 @@
 use bevy::ecs::relationship::Relationship;
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -297,6 +298,9 @@ fn on_segment_click(
     mut control_query: Query<&mut LumaSegmentedControl>,
     mut text_query: Query<&mut UText>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     switch_segment(
         trigger.entity.entity(),
         &mut commands,

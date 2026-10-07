@@ -252,7 +252,7 @@ fn dismiss_chip(
         if chip_query.contains(current) {
             commands.trigger(ChipDismissed(current));
             if let Ok(mut cmd) = commands.get_entity(current) {
-                cmd.despawn();
+                cmd.try_despawn();
             }
             break;
         }
@@ -266,6 +266,9 @@ fn on_chip_dismiss_click(
     dismiss_query: Query<&LumaChipDismiss>,
     chip_query: Query<&LumaChip>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     dismiss_chip(
         trigger.entity.entity(),
         &mut commands,

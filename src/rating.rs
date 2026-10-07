@@ -1,6 +1,7 @@
 //! Star rating widget with display and interactive modes.
 
 use bevy::ecs::relationship::Relationship;
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy_luma::prelude::*;
 
@@ -299,6 +300,9 @@ fn on_star_click(
     mut text_query: Query<&mut UText>,
     children_query: Query<&Children>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     set_rating(
         trigger.entity.entity(),
         &mut commands,

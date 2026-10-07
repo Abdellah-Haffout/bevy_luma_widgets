@@ -100,9 +100,12 @@ pub fn luma_skeleton(width: UVal, height: UVal, radius: f32) -> Skeleton {
 }
 
 fn skeleton_pulse_system(
-    time: Res<Time>,
+    time: Option<Res<Time>>,
     mut query: Query<(&LumaSkeleton, &mut UNode)>,
 ) {
+    let Some(time) = time else {
+        return;
+    };
     let t = time.elapsed_secs();
     for (skeleton, mut node) in query.iter_mut() {
         let factor = (t * skeleton.pulse_speed).sin() * 0.5 + 0.5; // [0.0, 1.0]

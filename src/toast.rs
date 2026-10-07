@@ -424,7 +424,7 @@ fn dismiss_toast(
         if toast_query.contains(current) {
             commands.trigger(ToastDismissed(current));
             if let Ok(mut cmd) = commands.get_entity(current) {
-                cmd.despawn();
+                cmd.try_despawn();
             }
             break;
         }
@@ -438,6 +438,9 @@ fn on_toast_close_click(
     close_query: Query<&LumaToastClose>,
     toast_query: Query<&LumaToast>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     dismiss_toast(
         trigger.entity.entity(),
         &mut commands,
@@ -464,16 +467,19 @@ fn on_toast_close_activate(
 }
 
 fn toast_timer_system(
-    time: Res<Time>,
+    time: Option<Res<Time>>,
     mut commands: Commands,
     mut query: Query<(Entity, &mut LumaToastTimer), With<LumaToast>>,
 ) {
+    let Some(time) = time else {
+        return;
+    };
     for (entity, mut toast_timer) in query.iter_mut() {
         toast_timer.timer.tick(time.delta());
         if toast_timer.timer.just_finished() {
             commands.trigger(ToastDismissed(entity));
             if let Ok(mut cmd) = commands.get_entity(entity) {
-                cmd.despawn();
+                cmd.try_despawn();
             }
         }
     }

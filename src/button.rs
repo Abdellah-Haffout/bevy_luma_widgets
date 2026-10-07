@@ -1,5 +1,6 @@
 //! Interactive button widget with variants, sizes, styles, and icon support.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -412,6 +413,9 @@ fn on_button_pointer_click(
     mut commands: Commands,
     query: Query<&LumaButton>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     let entity = trigger.entity.entity();
     if let Ok(button) = query.get(entity) {
         if !button.disabled {

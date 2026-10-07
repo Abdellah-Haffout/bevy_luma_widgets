@@ -1,5 +1,6 @@
 //! Checkbox widget with checkmark indicator and label support.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -255,6 +256,9 @@ fn on_checkbox_click(
     )>,
     mut text_query: Query<&mut UText, With<LumaCheckmark>>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     toggle_checkbox(trigger.entity.entity(), &mut commands, &mut query, &mut text_query);
 }
 

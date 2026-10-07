@@ -1,5 +1,6 @@
 //! Radio button widget with grouped single-choice selection.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy_luma::prelude::*;
 
@@ -264,6 +265,9 @@ fn on_radio_click(
     )>,
     mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     select_radio(trigger.entity.entity(), &mut commands, &mut all_radios, &mut dot_query);
 }
 

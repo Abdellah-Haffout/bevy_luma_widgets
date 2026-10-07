@@ -1,5 +1,6 @@
 //! Interactive slider / seekbar widget.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -337,6 +338,9 @@ fn on_slider_pointer_down(
     mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
     mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     let entity = trigger.entity.entity();
     if let Ok((entity, mut slider, global_tf, computed_size, children)) = slider_query.get_mut(entity) {
         if slider.disabled {
@@ -370,6 +374,9 @@ fn on_slider_drag(
     mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
     mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     let entity = trigger.entity.entity();
     if let Ok((entity, mut slider, global_tf, computed_size, children)) = slider_query.get_mut(entity) {
         if slider.disabled {

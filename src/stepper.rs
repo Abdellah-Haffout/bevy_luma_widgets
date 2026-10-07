@@ -1,6 +1,7 @@
 //! Numeric stepper / counter input widget with increment and decrement buttons.
 
 use bevy::ecs::relationship::Relationship;
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy_luma::prelude::*;
 
@@ -332,6 +333,9 @@ fn on_stepper_click(
     text_container_query: Query<&Children, With<LumaStepperValueText>>,
     mut text_query: Query<&mut UText>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     step_stepper(
         trigger.entity.entity(),
         &mut commands,

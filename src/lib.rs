@@ -115,8 +115,13 @@ mod tests {
 
     fn test_app() -> App {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default(), TextPlugin))
-            .add_plugins(LumaWidgetsPlugin);
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            TextPlugin,
+            bevy::scene::ScenePlugin,
+        ))
+        .add_plugins(LumaWidgetsPlugin);
         app
     }
 
@@ -360,6 +365,74 @@ mod tests {
         assert!(scope.button.is_some());
         assert!(scope.card.is_some());
         assert!(scope.toggle.is_none());
+    }
+
+    #[test]
+    fn test_mouse_clicks_on_widgets() {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::backend::HitData;
+        use bevy::picking::events::{Click, Pointer, Press};
+        use bevy::picking::pointer::{Location, PointerButton, PointerId};
+        use core::time::Duration;
+
+        let mut app = test_app();
+        app.update();
+
+        let btn = app.world_mut().spawn_scene(Button::new("ClickMe")).unwrap().id();
+        let toggle = app.world_mut().spawn_scene(Toggle::new(false)).unwrap().id();
+        let checkbox = app.world_mut().spawn_scene(Checkbox::new("Check", false)).unwrap().id();
+        let stepper = app.world_mut().spawn_scene(Stepper::new(5.0, 0.0, 10.0, 1.0)).unwrap().id();
+        let chip = app.world_mut().spawn_scene(Chip::new("Tag").removable(true)).unwrap().id();
+        let toast = app.world_mut().spawn_scene(Toast::new("Title", "Desc")).unwrap().id();
+        let swatch = app.world_mut().spawn_scene(Swatch::new(Color::srgb(1.0, 0.0, 0.0))).unwrap().id();
+        let radio = app.world_mut().spawn_scene(Radio::new("group", "opt1")).unwrap().id();
+        app.update();
+
+        let location = Location {
+            target: NormalizedRenderTarget::None { width: 0, height: 0 },
+            position: Vec2::ZERO,
+        };
+
+        let hit = HitData::new(Entity::PLACEHOLDER, 0.0, None, None);
+
+        let trigger_click = |app: &mut App, entity: Entity, button: PointerButton| {
+            app.world_mut().trigger(Pointer::new(
+                PointerId::Mouse,
+                location.clone(),
+                Click {
+                    button,
+                    hit: hit.clone(),
+                    duration: Duration::ZERO,
+                    count: 1,
+                },
+                entity,
+            ));
+        };
+
+        let trigger_press = |app: &mut App, entity: Entity, button: PointerButton| {
+            app.world_mut().trigger(Pointer::new(
+                PointerId::Mouse,
+                location.clone(),
+                Press {
+                    button,
+                    hit: hit.clone(),
+                    count: 1,
+                },
+                entity,
+            ));
+        };
+
+        for entity in [btn, toggle, checkbox, stepper, chip, toast, swatch, radio] {
+            // Test Left Click (Primary)
+            trigger_press(&mut app, entity, PointerButton::Primary);
+            trigger_click(&mut app, entity, PointerButton::Primary);
+            app.update();
+
+            // Test Right Click (Secondary)
+            trigger_press(&mut app, entity, PointerButton::Secondary);
+            trigger_click(&mut app, entity, PointerButton::Secondary);
+            app.update();
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 //! Animated toggle switch widget.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -290,6 +291,9 @@ fn on_toggle_click(
     )>,
     mut knob_query: Query<&mut LumaToggleKnob>,
 ) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
     toggle_state(trigger.entity.entity(), &mut commands, &mut query, &mut knob_query);
 }
 
@@ -309,9 +313,12 @@ fn on_toggle_activate(
 }
 
 fn toggle_animation_system(
-    time: Res<Time>,
+    time: Option<Res<Time>>,
     mut knob_query: Query<(&mut LumaToggleKnob, &mut USelf)>,
 ) {
+    let Some(time) = time else {
+        return;
+    };
     let dt = time.delta_secs();
     let speed = 24.0;
 
