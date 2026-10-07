@@ -17,7 +17,10 @@
 
 `bevy_luma_widgets` provides a battery-included collection of responsive, accessible, theme-aware UI components built on top of the `bevy_luma` signed distance field (SDF) engine.
 
-Every widget is designed from the ground up for **Bevy Scene Notation (`bsn!`)**, enabling declarative, compositional UI tree creation with zero runtime baggage.
+Every widget is designed from the ground up with **three core pillars**:
+1. **Declarative Structs with `Scene`**: Every widget is a first-class Rust `struct` with public fields, `Default`, and fluent builder methods, implementing `bevy::scene::Scene` directly for **Bevy Scene Notation (`bsn!`)**.
+2. **Android-Style Style Inheritance**: Hierarchical styling scopes (`LumaStyleScope`) allow subtrees and container components to inherit styles automatically (just like Android's XML theme/style inheritance), while still allowing individual widgets to override them.
+3. **Zero-Overhead Convenience Functions**: Familiar helper wrappers (`luma_button(...)`, `luma_toggle(...)`, etc.) remain fully supported for quick prototyping.
 
 ### Included Widgets
 
@@ -34,6 +37,21 @@ Every widget is designed from the ground up for **Bevy Scene Notation (`bsn!`)**
 | **Modal** | Overlay dialogs | Fullscreen darkened backdrop with centered dialog, message body, and action buttons. |
 | **Radio** | Mutually exclusive choices | Grouped single-selection radios with synchronized indicator dots. |
 | **Input** | Text editing fields | Styled container with focus borders, placeholder handling, and caret editing. |
+| **Kbd** | Keyboard keycap badges | Raised 3D keycaps for hotkeys and shortcut combinations (`Ctrl + K`). |
+| **StatCard** | Dashboard KPI metrics | Large display value, title, directional trend pill (`+14%` Up, `-8%` Down), and optional icon. |
+| **Stepper** | Numeric input counter | Decrement `[-]` and increment `[+]` buttons, value clamping, and dynamic formatted display. |
+| **Rating** | Star rating | 5-star rating widget in static display or interactive selectable mode (`Icon::STAR`). |
+| **Breadcrumb** | Hierarchical navigation | Trail navigation with chevron separators and clickable non-current items. |
+| **SegmentedControl** | Pill button group | Grouped segment options with animated active pill highlight. |
+| **Chip** | Tags & chips | Rounded pills with optional leading icons and interactive dismiss `[x]` buttons. |
+| **Toast** | Contextual notifications | Floating alert cards with variant status icons, close button, and auto-dismiss timer. |
+| **Swatch** | Color preview & picker | Rounded color tiles with selection border highlight and optional label. |
+| **Accordion** | Collapsible disclosure panels | Expandable content drawers with chevron animation. |
+| **Alert** | Status banners | Callout cards with semantic variants (Info, Success, Warning, Danger). |
+| **Avatar** | User initials & presence | Circular avatar initials with presence indicator dot (Online, Busy, Away). |
+| **Skeleton** | Loading placeholders | Pulsing placeholder boxes for asynchronous content loading states. |
+| **Tabs** | Switchable view switcher | Tab list triggers with active highlight and synchronized content panels. |
+| **Tooltip** | Hover descriptions | Compact floating tooltip bubble with subtle borders. |
 
 ---
 
@@ -46,6 +64,69 @@ Add `bevy_luma_widgets` to your `Cargo.toml`:
 bevy = "0.19"
 bevy_luma_widgets = "0.1.0"
 ```
+
+---
+
+## Declarative Structs & Fluent Builders
+
+Every widget can be created via:
+
+1. **Fluent Builder Pattern (Recommended)**:
+   ```rust
+   ({ Button::new("Confirm").variant(ButtonVariant::Primary).size(ButtonSize::Medium).font(font.clone()) })
+   ```
+2. **Direct Struct Literal**:
+   ```rust
+   ({
+       Button {
+           label: "Confirm".into(),
+           variant: ButtonVariant::Primary,
+           size: ButtonSize::Medium,
+           font: font.clone(),
+           ..default()
+       }
+   })
+   ```
+3. **Convenience Function**:
+   ```rust
+   (luma_button("Confirm", ButtonVariant::Primary, ButtonSize::Medium, font.clone()))
+   ```
+
+---
+
+## Android-Style Theming & Style Scoping
+
+Just like in Android where you can define styles (`<style name="MyButton">`) and apply them to a layout or subtree so that all descendant views automatically inherit those visual attributes, `bevy_luma_widgets` provides `LumaStyleScope`:
+
+```rust
+// Apply custom styling across a whole branch:
+luma_style_scope(
+    LumaStyleScope::new()
+        .button(ButtonStyle {
+            bg_normal: Color::srgb(0.22, 0.14, 0.38),
+            bg_hover: Color::srgb(0.32, 0.20, 0.52),
+            text_color: Color::WHITE,
+            radius: 20.0, // Fully rounded pill
+            ..default()
+        })
+        .toggle(ToggleStyle {
+            checked_bg: Color::srgb(0.65, 0.25, 0.90),
+            ..default()
+        }),
+    bsn! {
+        Children [
+            // These buttons automatically inherit the scoped pill styling!
+            ({ Button::new("Inherited Action A").font(font.clone()) }),
+            ({ Button::new("Inherited Action B").font(font.clone()) }),
+
+            // Individual widgets can still override the scope explicitly:
+            ({ Button::new("Danger Override").variant(ButtonVariant::Danger).font(font.clone()) })
+        ]
+    }
+)
+```
+
+Widgets inspect their ancestor hierarchy for `LumaStyleScope` using tree traversal. If no scope is found, they cleanly fall back to the global `LumaWidgetTheme` resource.
 
 ---
 
@@ -82,14 +163,12 @@ fn setup_ui(mut commands: Commands, theme: Res<Theme>) {
         }
         Children [
             (
-                luma_button("Click Me", ButtonVariant::Primary, ButtonSize::Medium, font.clone())
+                { Button::new("Click Me").variant(ButtonVariant::Primary).size(ButtonSize::Medium).font(font.clone()) }
                 on(|_event: On<Pointer<Click>>| {
                     info!("Button clicked!");
                 })
             ),
-            (
-                luma_toggle_with_label("Active", true, font.clone())
-            )
+            ({ Toggle::new(true).label("Active").font(font.clone()) })
         ]
     });
 }
@@ -101,17 +180,27 @@ fn setup_ui(mut commands: Commands, theme: Res<Theme>) {
 
 ### 1. Button
 
-Buttons support multiple styling presets, sizing variants, and optional icons:
+Buttons can be constructed declaratively as structs with fluent builder methods or convenience functions:
 
 ```rust
-// Standard text button
-luma_button("Confirm", ButtonVariant::Primary, ButtonSize::Medium, font.clone())
+// Declarative builder with variant and size
+({ Button::new("Confirm").variant(ButtonVariant::Primary).size(ButtonSize::Medium).font(font.clone()) })
+
+// Direct struct initialization
+({
+    Button {
+        label: "Confirm".into(),
+        variant: ButtonVariant::Primary,
+        font: font.clone(),
+        ..default()
+    }
+})
 
 // Leading icon button
-luma_button_with_icon(Icon::PLAY, "Start Game", ButtonVariant::Primary, ButtonSize::Large, font.clone(), icon_font.clone())
+({ Button::new("Play").icon(Icon::PLAY).variant(ButtonVariant::Primary).font(font.clone()).icon_font(icon_font.clone()) })
 
-// Square icon-only button
-luma_icon_button(Icon::SETTINGS, ButtonVariant::Secondary, ButtonSize::Medium, icon_font.clone())
+// Backwards-compatible helper
+(luma_button("Confirm", ButtonVariant::Primary, ButtonSize::Medium, font.clone()))
 ```
 
 ### 2. Toggle Switch
@@ -119,11 +208,11 @@ luma_icon_button(Icon::SETTINGS, ButtonVariant::Secondary, ButtonSize::Medium, i
 Interactive switches with smooth animated knob transitions:
 
 ```rust
-// Standalone switch
-luma_toggle(true)
+// Declarative builder
+({ Toggle::new(true).label("V-Sync Lock").font(font.clone()) })
 
-// Switch with text label
-luma_toggle_with_label("V-Sync Lock", false, font.clone())
+// Standalone switch without label
+({ Toggle::new(false) })
 ```
 
 Listen to state changes via the `ToggleChanged` observer event:
@@ -137,7 +226,14 @@ app.add_observer(|trigger: On<ToggleChanged>| {
 ### 3. Checkbox
 
 ```rust
-luma_checkbox("Enable Motion Blur", true, font.clone(), icon_font.clone())
+// Declarative builder
+({ Checkbox::new("Enable Motion Blur", true).font(font.clone()).icon_font(icon_font.clone()) })
+
+// Checkbox without label (box only)
+({ Checkbox::box_only(true).icon_font(icon_font.clone()) })
+
+// Convenience function
+(luma_checkbox("Enable Motion Blur", true, font.clone(), icon_font.clone()))
 ```
 
 ### 4. Slider
@@ -145,8 +241,14 @@ luma_checkbox("Enable Motion Blur", true, font.clone(), icon_font.clone())
 Sliders track pointer clicks and dragging, automatically synchronizing the fill bar and thumb knob:
 
 ```rust
-// value, min, max, width in pixels
-luma_slider(75.0, 0.0, 100.0, 240.0)
+// Declarative builder with range and width
+({ Slider::new(75.0, 0.0, 100.0, 240.0) })
+
+// Stepped slider
+({ Slider::stepped(20.0, 0.0, 100.0, 10.0, 240.0) })
+
+// Direct builder chaining
+({ Slider::default().value(50.0).min(0.0).max(100.0).width(200.0) })
 ```
 
 Listen for changes via `SliderChanged`:
@@ -160,7 +262,11 @@ app.add_observer(|trigger: On<SliderChanged>| {
 ### 5. Progress Bar
 
 ```rust
-luma_progress_bar(0.65, UVal::Px(280.0), 8.0, ProgressVariant::Success)
+// Declarative builder
+({ ProgressBar::new(0.65).width(UVal::Px(280.0)).height(8.0).variant(ProgressVariant::Success) })
+
+// Convenience function
+(luma_progress_bar(0.65, UVal::Px(280.0), 8.0, ProgressVariant::Success))
 ```
 
 Variants: `ProgressVariant::Default`, `ProgressVariant::Success`, `ProgressVariant::Warning`, `ProgressVariant::Danger`.
@@ -168,33 +274,223 @@ Variants: `ProgressVariant::Default`, `ProgressVariant::Success`, `ProgressVaria
 ### 6. Badge
 
 ```rust
-luma_badge("ONLINE", BadgeVariant::Success, font.clone())
-luma_badge_with_icon(Icon::CHECK, "VERIFIED", BadgeVariant::Info, font.clone(), icon_font.clone())
+// Declarative builder
+({ Badge::new("ONLINE").variant(BadgeVariant::Success).font(font.clone()) })
+({ Badge::new("VERIFIED").icon(Icon::CHECK).variant(BadgeVariant::Info).font(font.clone()).icon_font(icon_font.clone()) })
+
+// Convenience functions
+(luma_badge("ONLINE", BadgeVariant::Success, font.clone()))
+(luma_badge_with_icon(Icon::CHECK, "VERIFIED", BadgeVariant::Info, font.clone(), icon_font.clone()))
 ```
 
 ### 7. Divider
 
 ```rust
-// Simple horizontal separator
-luma_divider()
+// Horizontal divider
+({ Divider::horizontal() })
 
-// Horizontal separator with centered text label
-luma_divider_with_label("OR", font.clone())
+// Horizontal divider with centered text label
+({ Divider::horizontal().label("OR").font(font.clone()) })
 
-// Fixed vertical separator
-luma_divider_vertical(40.0)
+// Fixed vertical divider
+({ Divider::vertical(40.0) })
 ```
 
 ### 8. Modal Dialog
 
 ```rust
-luma_modal_dialog(
-    "Discard Changes?",
-    "Any unsaved edits will be lost permanently.",
-    "Cancel",
-    "Discard",
-    font.clone(),
-)
+({
+    Modal::new("Discard Changes?", "Any unsaved edits will be lost permanently.")
+        .confirm("Discard")
+        .cancel("Cancel")
+        .font(font.clone())
+})
+```
+
+### 9. Keyboard Keycap (Kbd)
+
+```rust
+// Single keycap
+({ Kbd::new("Ctrl").size(KbdSize::Medium).font(font.clone()) })
+
+// Multi-key combination
+(luma_kbd_shortcut((
+    { Kbd::new("Ctrl").size(KbdSize::Medium).font(font.clone()) },
+    luma_kbd_separator(font.clone()),
+    { Kbd::new("K").size(KbdSize::Medium).font(font.clone()) }
+)))
+```
+
+### 10. Stat / Metric Card
+
+```rust
+// Basic metric card
+({ StatCard::new("Active Users", "14,820").font(font.clone()) })
+
+// Metric with trend indicator (+14.2% Up)
+({
+    StatCard::new("Active Users", "14,820")
+        .trend(StatTrend::Up("+14.2%".into()))
+        .font(font.clone())
+        .icon_font(icon_font.clone())
+})
+
+// Full KPI card with icon and description
+({
+    StatCard::new("Frame Rate", "144 FPS")
+        .trend(StatTrend::Up("+12 FPS".into()))
+        .description("VSync lock enabled")
+        .icon(Icon::CPU)
+        .font(font.clone())
+        .icon_font(icon_font.clone())
+})
+```
+
+### 11. Numeric Stepper
+
+Interactive counter with decrement `[-]` and increment `[+]` buttons:
+
+```rust
+// value, min, max, step
+({ Stepper::new(3.0, 1.0, 20.0, 1.0).font(font.clone()).icon_font(icon_font.clone()) })
+```
+
+Listen for changes via `StepperChanged`:
+
+```rust
+app.add_observer(|trigger: On<StepperChanged>| {
+    info!("Stepper value: {}", trigger.value);
+});
+```
+
+### 12. Star Rating
+
+```rust
+// Read-only display (5 stars)
+({ Rating::new(5).icon_font(icon_font.clone()) })
+
+// Interactive clickable 5-star selector
+({ Rating::new(4).interactive(true).icon_font(icon_font.clone()) })
+```
+
+Listen for user selections via `RatingChanged`:
+
+```rust
+app.add_observer(|trigger: On<RatingChanged>| {
+    info!("New rating selected: {} stars", trigger.value);
+});
+```
+
+### 13. Breadcrumbs
+
+```rust
+({
+    BreadcrumbTrail::new((
+        BreadcrumbItem::new(0, "home", "Home", false).font(font.clone()),
+        BreadcrumbSeparator::new(icon_font.clone()),
+        BreadcrumbItem::new(1, "components", "Components", false).font(font.clone()),
+        BreadcrumbSeparator::new(icon_font.clone()),
+        BreadcrumbItem::new(2, "widgets", "Gallery", true).font(font.clone()),
+    ))
+})
+```
+
+Listen for breadcrumb clicks via `BreadcrumbClicked`:
+
+```rust
+app.add_observer(|trigger: On<BreadcrumbClicked>| {
+    info!("Navigating to crumb {}: {}", trigger.index, trigger.value);
+});
+```
+
+### 14. Segmented Control
+
+```rust
+({
+    SegmentedControl::new(
+        "view_mode",
+        "analytics",
+        (
+            SegmentOption::new("view_mode", "overview", "Overview", false).font(font.clone()),
+            SegmentOption::new("view_mode", "analytics", "Analytics", true).font(font.clone()),
+            SegmentOption::new("view_mode", "settings", "Settings", false).font(font.clone()),
+        ),
+    )
+})
+```
+
+Listen for segment changes via `SegmentChanged`:
+
+```rust
+app.add_observer(|trigger: On<SegmentChanged>| {
+    info!("Selected segment '{}': {}", trigger.group, trigger.value);
+});
+```
+
+### 15. Chips & Tags
+
+```rust
+// Standard text chip
+({ Chip::new("Rust 2024").font(font.clone()) })
+
+// Chip with icon
+({ Chip::new("Multi-Threaded").icon(Icon::CPU).font(font.clone()).icon_font(icon_font.clone()) })
+
+// Removable chip with dismiss [x] button
+({ Chip::new("Bevy 0.19").removable(true).font(font.clone()).icon_font(icon_font.clone()) })
+```
+
+Listen for dismiss actions via `ChipDismissed`:
+
+```rust
+app.add_observer(|trigger: On<ChipDismissed>| {
+    info!("Chip {:?} was dismissed", trigger.0);
+});
+```
+
+### 16. Toast Notifications
+
+```rust
+// Interactive notification banner
+({
+    Toast::new(
+        "Download Complete",
+        "The assets have finished downloading.",
+    )
+    .variant(ToastVariant::Success)
+    .font(font.clone())
+    .icon_font(icon_font.clone())
+})
+
+// Auto-dismiss notification after 5 seconds
+({
+    Toast::new(
+        "Notice",
+        "Temporary notification message",
+    )
+    .variant(ToastVariant::Info)
+    .duration(5.0)
+    .font(font.clone())
+    .icon_font(icon_font.clone())
+})
+```
+
+### 17. Color Swatch
+
+```rust
+// Color preview tile
+({ Swatch::new(Color::srgb(0.20, 0.45, 0.90)).selected(true) })
+
+// Swatch with label
+({ Swatch::new(Color::srgb(0.16, 0.75, 0.45)).label("Emerald").selected(false).font(font.clone()) })
+```
+
+Listen for selection changes via `SwatchSelected`:
+
+```rust
+app.add_observer(|trigger: On<SwatchSelected>| {
+    info!("Swatch clicked: {:?}", trigger.color);
+});
 ```
 
 ---

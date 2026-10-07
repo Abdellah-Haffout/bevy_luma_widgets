@@ -39,55 +39,148 @@ const SELECTED_COLOR: Color = Color::srgb(0.20, 0.45, 0.90);
 const UNSELECTED_BORDER: Color = Color::srgb(0.30, 0.35, 0.45);
 const CIRCLE_BG: Color = Color::srgba(0.12, 0.15, 0.20, 0.8);
 
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
+
+/// Declarative Radio button widget struct with all configurable properties.
+#[derive(Clone, Debug, Reflect)]
+pub struct Radio {
+    pub group: String,
+    pub value: String,
+    pub label: Option<String>,
+    pub selected: bool,
+    pub disabled: bool,
+    pub font: Handle<Font>,
+}
+
+impl Default for Radio {
+    fn default() -> Self {
+        Self {
+            group: String::new(),
+            value: String::new(),
+            label: None,
+            selected: false,
+            disabled: false,
+            font: Handle::default(),
+        }
+    }
+}
+
+impl Radio {
+    pub fn new(group: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            group: group.into(),
+            value: value.into(),
+            ..default()
+        }
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn font(mut self, font: Handle<Font>) -> Self {
+        self.font = font;
+        self
+    }
+}
+
+impl Scene for Radio {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let border_color = if self.selected { SELECTED_COLOR } else { UNSELECTED_BORDER };
+        let dot_color = if self.selected { SELECTED_COLOR } else { Color::NONE };
+        let group = self.group;
+        let value = self.value;
+        let selected = self.selected;
+        let disabled = self.disabled;
+
+        let circle_node = bsn! {
+            LumaRadio {
+                group,
+                value,
+                selected,
+                disabled,
+            }
+            UNode {
+                width: UVal::Px(20.0),
+                height: UVal::Px(20.0),
+                background_color: CIRCLE_BG,
+                border_radius: UCornerRadius::all(10.0),
+            }
+            UBorder {
+                color: border_color,
+                width: 1.5,
+                radius: UCornerRadius::all(10.0),
+            }
+            UInteraction::default()
+            UFocusable::new()
+            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            ULayout {
+                display: UDisplay::Flex,
+                justify_content: UJustifyContent::Center,
+                align_items: UAlignItems::Center,
+            }
+            Children [
+                (
+                    LumaRadioDot
+                    UNode {
+                        width: UVal::Px(10.0),
+                        height: UVal::Px(10.0),
+                        background_color: dot_color,
+                        border_radius: UCornerRadius::all(5.0),
+                    }
+                )
+            ]
+        };
+
+        if let Some(label_str) = self.label {
+            let font = self.font;
+            let container = bsn! {
+                UNode::default()
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    gap: 10.0,
+                }
+                Children [
+                    circle_node,
+                    (UText {
+                        text: label_str,
+                        font_size: 14.0,
+                        font,
+                        color: Color::srgb(0.92, 0.94, 0.98),
+                    })
+                ]
+            };
+            container.resolve(context, scene)
+        } else {
+            circle_node.resolve(context, scene)
+        }
+    }
+}
+
 /// Creates an isolated circular radio button scene.
 pub fn luma_radio_circle(
     group: impl Into<String>,
     value: impl Into<String>,
     selected: bool,
-) -> impl Scene {
-    let border_color = if selected { SELECTED_COLOR } else { UNSELECTED_BORDER };
-    let dot_color = if selected { SELECTED_COLOR } else { Color::NONE };
-    let group = group.into();
-    let value = value.into();
-
-    bsn! {
-        LumaRadio {
-            group,
-            value,
-            selected,
-            disabled: false,
-        }
-        UNode {
-            width: UVal::Px(20.0),
-            height: UVal::Px(20.0),
-            background_color: CIRCLE_BG,
-            border_radius: UCornerRadius::all(10.0),
-        }
-        UBorder {
-            color: border_color,
-            width: 1.5,
-            radius: UCornerRadius::all(10.0),
-        }
-        UInteraction::default()
-        UFocusable::new()
-        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-        ULayout {
-            display: UDisplay::Flex,
-            justify_content: UJustifyContent::Center,
-            align_items: UAlignItems::Center,
-        }
-        Children [
-            (
-                LumaRadioDot
-                UNode {
-                    width: UVal::Px(10.0),
-                    height: UVal::Px(10.0),
-                    background_color: dot_color,
-                    border_radius: UCornerRadius::all(5.0),
-                }
-            )
-        ]
-    }
+) -> Radio {
+    Radio::new(group, value).selected(selected)
 }
 
 /// Creates a radio button with an adjacent text label.
@@ -97,31 +190,8 @@ pub fn luma_radio(
     label: impl Into<String>,
     selected: bool,
     font: Handle<Font>,
-) -> impl Scene {
-    let label = label.into();
-
-    bsn! {
-        UNode::default()
-        ULayout {
-            display: UDisplay::Flex,
-            flex_direction: UFlexDirection::Row,
-            align_items: UAlignItems::Center,
-            gap: 10.0,
-        }
-        Children [
-            (
-                luma_radio_circle(group, value, selected)
-            ),
-            (
-                UText {
-                    text: label,
-                    font_size: 14.0,
-                    font,
-                    color: Color::srgb(0.92, 0.94, 0.98),
-                }
-            )
-        ]
-    }
+) -> Radio {
+    Radio::new(group, value).label(label).selected(selected).font(font)
 }
 fn select_radio(
     target_entity: Entity,

@@ -1,6 +1,7 @@
 //! Checkbox widget with checkmark indicator and label support.
 
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
 /// Marker and state component for a checkbox.
@@ -35,48 +36,151 @@ const UNCHECKED_BG: Color = Color::srgba(0.12, 0.15, 0.20, 0.8);
 const CHECKED_BORDER: Color = Color::srgb(0.28, 0.55, 1.00);
 const UNCHECKED_BORDER: Color = Color::srgb(0.30, 0.35, 0.45);
 
-/// Creates an isolated checkbox box scene.
-pub fn luma_checkbox_box(is_checked: bool, icon_font: Handle<Font>) -> impl Scene {
-    let bg = if is_checked { CHECKED_BG } else { UNCHECKED_BG };
-    let border = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
-    let icon_color = if is_checked { Color::WHITE } else { Color::NONE };
+/// Declarative Checkbox widget struct with all configurable properties.
+#[derive(Clone, Debug, Reflect)]
+pub struct Checkbox {
+    pub label: Option<String>,
+    pub is_checked: bool,
+    pub disabled: bool,
+    pub font: Handle<Font>,
+    pub icon_font: Handle<Font>,
+}
 
-    bsn! {
-        LumaCheckbox {
-            is_checked,
+impl Default for Checkbox {
+    fn default() -> Self {
+        Self {
+            label: None,
+            is_checked: false,
             disabled: false,
+            font: Handle::default(),
+            icon_font: Handle::default(),
         }
-        UNode {
-            width: UVal::Px(20.0),
-            height: UVal::Px(20.0),
-            background_color: bg,
-            border_radius: UCornerRadius::all(5.0),
-        }
-        UBorder {
-            color: border,
-            width: 1.5,
-            radius: UCornerRadius::all(5.0),
-        }
-        UInteraction::default()
-        UFocusable::new()
-        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-        ULayout {
-            display: UDisplay::Flex,
-            justify_content: UJustifyContent::Center,
-            align_items: UAlignItems::Center,
-        }
-        Children [
-            (
-                LumaCheckmark
-                UText {
-                    text: { Icon::CHECK.to_string() },
-                    font_size: 13.0,
-                    font: icon_font,
-                    color: icon_color,
-                }
-            )
-        ]
     }
+}
+
+impl Checkbox {
+    pub fn new(label: impl Into<String>, is_checked: bool) -> Self {
+        Self {
+            label: Some(label.into()),
+            is_checked,
+            ..default()
+        }
+    }
+
+    pub fn box_only(is_checked: bool) -> Self {
+        Self {
+            is_checked,
+            ..default()
+        }
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn checked(mut self, is_checked: bool) -> Self {
+        self.is_checked = is_checked;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn font(mut self, font: Handle<Font>) -> Self {
+        self.font = font;
+        self
+    }
+
+    pub fn icon_font(mut self, icon_font: Handle<Font>) -> Self {
+        self.icon_font = icon_font;
+        self
+    }
+}
+
+impl Scene for Checkbox {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let bg = if self.is_checked { CHECKED_BG } else { UNCHECKED_BG };
+        let border = if self.is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+        let icon_color = if self.is_checked { Color::WHITE } else { Color::NONE };
+
+        let is_checked = self.is_checked;
+        let disabled = self.disabled;
+        let icon_font = self.icon_font;
+        let font = self.font;
+
+        let box_node = bsn! {
+            LumaCheckbox {
+                is_checked,
+                disabled,
+            }
+            UNode {
+                width: UVal::Px(20.0),
+                height: UVal::Px(20.0),
+                background_color: bg,
+                border_radius: UCornerRadius::all(5.0),
+            }
+            UBorder {
+                color: border,
+                width: 1.5,
+                radius: UCornerRadius::all(5.0),
+            }
+            UInteraction::default()
+            UFocusable::new()
+            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            ULayout {
+                display: UDisplay::Flex,
+                justify_content: UJustifyContent::Center,
+                align_items: UAlignItems::Center,
+            }
+            Children [
+                (
+                    LumaCheckmark
+                    UText {
+                        text: { Icon::CHECK.to_string() },
+                        font_size: 13.0,
+                        font: icon_font,
+                        color: icon_color,
+                    }
+                )
+            ]
+        };
+
+        if let Some(label_text) = self.label {
+            let container = bsn! {
+                UNode::default()
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    gap: 10.0,
+                }
+                Children [
+                    box_node,
+                    (UText {
+                        text: label_text,
+                        font_size: 14.0,
+                        font,
+                        color: Color::srgb(0.92, 0.94, 0.98),
+                    })
+                ]
+            };
+            container.resolve(context, scene)
+        } else {
+            box_node.resolve(context, scene)
+        }
+    }
+}
+
+/// Creates an isolated checkbox box scene.
+pub fn luma_checkbox_box(is_checked: bool, icon_font: Handle<Font>) -> Checkbox {
+    Checkbox::box_only(is_checked).icon_font(icon_font)
 }
 
 /// Creates a checkbox with an adjacent text label.
@@ -85,31 +189,8 @@ pub fn luma_checkbox(
     is_checked: bool,
     font: Handle<Font>,
     icon_font: Handle<Font>,
-) -> impl Scene {
-    let label = label.into();
-
-    bsn! {
-        UNode::default()
-        ULayout {
-            display: UDisplay::Flex,
-            flex_direction: UFlexDirection::Row,
-            align_items: UAlignItems::Center,
-            gap: 10.0,
-        }
-        Children [
-            (
-                luma_checkbox_box(is_checked, icon_font)
-            ),
-            (
-                UText {
-                    text: label,
-                    font_size: 14.0,
-                    font,
-                    color: Color::srgb(0.92, 0.94, 0.98),
-                }
-            )
-        ]
-    }
+) -> Checkbox {
+    Checkbox::new(label, is_checked).font(font).icon_font(icon_font)
 }
 
 fn toggle_checkbox(
@@ -122,7 +203,7 @@ fn toggle_checkbox(
         Option<&Children>,
         Option<&mut UFocusVisual>,
     )>,
-    checkmark_query: &mut Query<&mut UText, With<LumaCheckmark>>,
+    text_query: &mut Query<&mut UText, With<LumaCheckmark>>,
 ) {
     if let Ok((mut checkbox, mut node, mut border, children, mut visual_opt)) = query.get_mut(entity) {
         if checkbox.disabled {
@@ -149,7 +230,7 @@ fn toggle_checkbox(
 
         if let Some(children) = children {
             for child in children.iter() {
-                if let Ok(mut text) = checkmark_query.get_mut(child) {
+                if let Ok(mut text) = text_query.get_mut(child) {
                     text.color = icon_color;
                 }
             }
@@ -172,9 +253,9 @@ fn on_checkbox_click(
         Option<&Children>,
         Option<&mut UFocusVisual>,
     )>,
-    mut checkmark_query: Query<&mut UText, With<LumaCheckmark>>,
+    mut text_query: Query<&mut UText, With<LumaCheckmark>>,
 ) {
-    toggle_checkbox(trigger.entity.entity(), &mut commands, &mut query, &mut checkmark_query);
+    toggle_checkbox(trigger.entity.entity(), &mut commands, &mut query, &mut text_query);
 }
 
 fn on_checkbox_activate(
@@ -187,9 +268,9 @@ fn on_checkbox_activate(
         Option<&Children>,
         Option<&mut UFocusVisual>,
     )>,
-    mut checkmark_query: Query<&mut UText, With<LumaCheckmark>>,
+    mut text_query: Query<&mut UText, With<LumaCheckmark>>,
 ) {
-    toggle_checkbox(trigger.entity, &mut commands, &mut query, &mut checkmark_query);
+    toggle_checkbox(trigger.entity, &mut commands, &mut query, &mut text_query);
 }
 
 pub struct LumaCheckboxPlugin;

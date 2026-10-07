@@ -18,17 +18,85 @@ impl Default for LumaSkeleton {
 const SKELETON_BASE_COLOR: Color = Color::srgb(0.12, 0.15, 0.20);
 const SKELETON_PEAK_COLOR: Color = Color::srgb(0.20, 0.25, 0.34);
 
-/// Creates an animated loading skeleton placeholder scene.
-pub fn luma_skeleton(width: UVal, height: UVal, radius: f32) -> impl Scene {
-    bsn! {
-        LumaSkeleton::default()
-        UNode {
-            width,
-            height,
-            background_color: SKELETON_BASE_COLOR,
-            border_radius: UCornerRadius::all(radius),
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
+
+/// Declarative Skeleton placeholder widget struct with all configurable properties.
+#[derive(Clone, Debug, Reflect)]
+pub struct Skeleton {
+    pub width: UVal,
+    pub height: UVal,
+    pub radius: f32,
+    pub pulse_speed: f32,
+    pub base_color: Color,
+}
+
+impl Default for Skeleton {
+    fn default() -> Self {
+        Self {
+            width: UVal::Percent(1.0),
+            height: UVal::Px(16.0),
+            radius: 4.0,
+            pulse_speed: 2.5,
+            base_color: SKELETON_BASE_COLOR,
         }
     }
+}
+
+impl Skeleton {
+    pub fn new(width: UVal, height: UVal) -> Self {
+        Self {
+            width,
+            height,
+            ..default()
+        }
+    }
+
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
+        self
+    }
+
+    pub fn pulse_speed(mut self, pulse_speed: f32) -> Self {
+        self.pulse_speed = pulse_speed;
+        self
+    }
+
+    pub fn base_color(mut self, base_color: Color) -> Self {
+        self.base_color = base_color;
+        self
+    }
+}
+
+impl Scene for Skeleton {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let width = self.width;
+        let height = self.height;
+        let radius = self.radius;
+        let pulse_speed = self.pulse_speed;
+        let base_color = self.base_color;
+
+        let s = bsn! {
+            LumaSkeleton {
+                pulse_speed,
+            }
+            UNode {
+                width,
+                height,
+                background_color: base_color,
+                border_radius: { UCornerRadius::all(radius) },
+            }
+        };
+        s.resolve(context, scene)
+    }
+}
+
+/// Creates an animated loading skeleton placeholder scene.
+pub fn luma_skeleton(width: UVal, height: UVal, radius: f32) -> Skeleton {
+    Skeleton::new(width, height).radius(radius)
 }
 
 fn skeleton_pulse_system(

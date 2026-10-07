@@ -1,7 +1,10 @@
 //! Animated toggle switch widget.
 
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::theme::ToggleStyle;
 
 /// Marker and state component for a toggle switch.
 #[derive(Component, Clone, Debug, Reflect)]
@@ -43,56 +46,177 @@ const UNCHECKED_BG: Color = Color::srgb(0.18, 0.22, 0.28);
 const CHECKED_BORDER: Color = Color::srgb(0.28, 0.55, 1.00);
 const UNCHECKED_BORDER: Color = Color::srgb(0.28, 0.32, 0.40);
 
-/// Creates an animated toggle switch scene.
-pub fn luma_toggle(is_checked: bool) -> impl Scene {
-    let initial_offset = if is_checked { TRAVEL_DISTANCE } else { 0.0 };
-    let bg = if is_checked { CHECKED_BG } else { UNCHECKED_BG };
-    let border = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+/// Declarative Toggle switch widget struct with all configurable properties.
+#[derive(Clone, Debug, Reflect)]
+pub struct Toggle {
+    pub is_checked: bool,
+    pub label: Option<String>,
+    pub disabled: bool,
+    pub font: Handle<Font>,
+    pub style: Option<ToggleStyle>,
+}
 
-    bsn! {
-        LumaToggle {
-            is_checked,
+impl Default for Toggle {
+    fn default() -> Self {
+        Self {
+            is_checked: false,
+            label: None,
             disabled: false,
+            font: Handle::default(),
+            style: None,
         }
-        UNode {
-            width: UVal::Px(TRACK_WIDTH),
-            height: UVal::Px(TRACK_HEIGHT),
-            background_color: bg,
-            border_radius: UCornerRadius::all(12.0),
-            padding: USides::all(2.0),
-        }
-        UBorder {
-            color: border,
-            width: 1.0,
-            radius: UCornerRadius::all(12.0),
-        }
-        UInteraction::default()
-        UFocusable::new()
-        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-        ULayout {
-            display: UDisplay::Flex,
-            flex_direction: UFlexDirection::Row,
-            align_items: UAlignItems::Center,
-        }
-        Children [
-            (
-                LumaToggleKnob {
-                    current_offset: initial_offset,
-                    target_offset: initial_offset,
-                }
-                UNode {
-                    width: UVal::Px(KNOB_SIZE),
-                    height: UVal::Px(KNOB_SIZE),
-                    background_color: Color::WHITE,
-                    border_radius: UCornerRadius::all(10.0),
-                }
-                USelf {
-                    position_type: UPositionType::Relative,
-                    left: { UVal::Px(initial_offset) },
-                }
-            )
-        ]
     }
+}
+
+impl Toggle {
+    pub fn new(is_checked: bool) -> Self {
+        Self {
+            is_checked,
+            ..default()
+        }
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn checked(mut self, is_checked: bool) -> Self {
+        self.is_checked = is_checked;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn font(mut self, font: Handle<Font>) -> Self {
+        self.font = font;
+        self
+    }
+
+    pub fn style(mut self, style: ToggleStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
+}
+
+impl Scene for Toggle {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let (track_w, track_h, knob_sz, rad, chk_bg, unchk_bg, chk_bdr, unchk_bdr, knob_col) =
+            if let Some(ref s) = self.style {
+                (
+                    s.track_width,
+                    s.track_height,
+                    s.knob_size,
+                    s.radius,
+                    s.checked_bg,
+                    s.unchecked_bg,
+                    s.checked_border,
+                    s.unchecked_border,
+                    s.knob_color,
+                )
+            } else {
+                (
+                    TRACK_WIDTH,
+                    TRACK_HEIGHT,
+                    KNOB_SIZE,
+                    12.0,
+                    CHECKED_BG,
+                    UNCHECKED_BG,
+                    CHECKED_BORDER,
+                    UNCHECKED_BORDER,
+                    Color::WHITE,
+                )
+            };
+
+        let travel = track_w - knob_sz - 4.0;
+        let initial_offset = if self.is_checked { travel } else { 0.0 };
+        let bg = if self.is_checked { chk_bg } else { unchk_bg };
+        let border = if self.is_checked { chk_bdr } else { unchk_bdr };
+        let is_checked = self.is_checked;
+        let disabled = self.disabled;
+        let font = self.font;
+
+        let switch_node = bsn! {
+            LumaToggle {
+                is_checked,
+                disabled,
+            }
+            UNode {
+                width: UVal::Px(track_w),
+                height: UVal::Px(track_h),
+                background_color: bg,
+                border_radius: UCornerRadius::all(rad),
+                padding: USides::all(2.0),
+            }
+            UBorder {
+                color: border,
+                width: 1.0,
+                radius: UCornerRadius::all(rad),
+            }
+            UInteraction::default()
+            UFocusable::new()
+            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            ULayout {
+                display: UDisplay::Flex,
+                flex_direction: UFlexDirection::Row,
+                align_items: UAlignItems::Center,
+            }
+            Children [
+                (
+                    LumaToggleKnob {
+                        current_offset: initial_offset,
+                        target_offset: initial_offset,
+                    }
+                    UNode {
+                        width: UVal::Px(knob_sz),
+                        height: UVal::Px(knob_sz),
+                        background_color: knob_col,
+                        border_radius: UCornerRadius::all(knob_sz * 0.5),
+                    }
+                    USelf {
+                        position_type: UPositionType::Relative,
+                        left: { UVal::Px(initial_offset) },
+                    }
+                )
+            ]
+        };
+
+        if let Some(label_text) = self.label {
+            let container = bsn! {
+                UNode::default()
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    gap: 12.0,
+                }
+                Children [
+                    switch_node,
+                    (UText {
+                        text: label_text,
+                        font_size: 14.0,
+                        font,
+                        color: Color::srgb(0.90, 0.92, 0.96),
+                    })
+                ]
+            };
+            container.resolve(context, scene)
+        } else {
+            switch_node.resolve(context, scene)
+        }
+    }
+}
+
+/// Creates an animated toggle switch scene.
+pub fn luma_toggle(is_checked: bool) -> Toggle {
+    Toggle::new(is_checked)
 }
 
 /// Creates a toggle switch with an adjacent text label.
@@ -100,31 +224,8 @@ pub fn luma_toggle_with_label(
     label: impl Into<String>,
     is_checked: bool,
     font: Handle<Font>,
-) -> impl Scene {
-    let label = label.into();
-
-    bsn! {
-        UNode::default()
-        ULayout {
-            display: UDisplay::Flex,
-            flex_direction: UFlexDirection::Row,
-            align_items: UAlignItems::Center,
-            gap: 12.0,
-        }
-        Children [
-            (
-                luma_toggle(is_checked)
-            ),
-            (
-                UText {
-                    text: label,
-                    font_size: 14.0,
-                    font,
-                    color: Color::srgb(0.92, 0.94, 0.98),
-                }
-            )
-        ]
-    }
+) -> Toggle {
+    Toggle::new(is_checked).label(label).font(font)
 }
 
 fn toggle_state(

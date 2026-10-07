@@ -50,6 +50,127 @@ pub struct LumaAlert {
     pub variant: AlertVariant,
 }
 
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
+
+/// Declarative Alert widget struct with all configurable properties.
+#[derive(Clone, Debug, Reflect)]
+pub struct Alert {
+    pub title: String,
+    pub description: String,
+    pub variant: AlertVariant,
+    pub font: Handle<Font>,
+    pub icon_font: Handle<Font>,
+}
+
+impl Default for Alert {
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            description: String::new(),
+            variant: AlertVariant::Info,
+            font: Handle::default(),
+            icon_font: Handle::default(),
+        }
+    }
+}
+
+impl Alert {
+    pub fn new(title: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            description: description.into(),
+            ..default()
+        }
+    }
+
+    pub fn variant(mut self, variant: AlertVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    pub fn font(mut self, font: Handle<Font>) -> Self {
+        self.font = font;
+        self
+    }
+
+    pub fn icon_font(mut self, icon_font: Handle<Font>) -> Self {
+        self.icon_font = icon_font;
+        self
+    }
+}
+
+impl Scene for Alert {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let variant = self.variant;
+        let title = self.title;
+        let description = self.description;
+        let font = self.font;
+        let icon_font = self.icon_font;
+
+        let (bg_color, border_color, accent_color, icon_char) = variant.colors();
+
+        let s = bsn! {
+            LumaAlert {
+                variant,
+            }
+            UNode {
+                width: UVal::Percent(1.0),
+                padding: USides::all(16.0),
+                background_color: bg_color,
+                border_radius: UCornerRadius::all(8.0),
+            }
+            UBorder {
+                color: border_color,
+                width: 1.0,
+                radius: UCornerRadius::all(8.0),
+            }
+            ULayout {
+                display: UDisplay::Flex,
+                flex_direction: UFlexDirection::Row,
+                gap: 14.0,
+                align_items: UAlignItems::FlexStart,
+            }
+            Children [
+                // Status Icon
+                (UText {
+                    text: { icon_char.to_string() },
+                    font_size: 20.0,
+                    font: icon_font,
+                    color: accent_color,
+                }),
+                // Text Column (Title + Description)
+                (
+                    UNode::default()
+                    ULayout {
+                        display: UDisplay::Flex,
+                        flex_direction: UFlexDirection::Column,
+                        gap: 4.0,
+                    }
+                    Children [
+                        (UText {
+                            text: title,
+                            font_size: 14.0,
+                            font: { font.clone() },
+                            color: Color::WHITE,
+                        }),
+                        (UText {
+                            text: description,
+                            font_size: 13.0,
+                            font,
+                            color: Color::srgb(0.75, 0.80, 0.88),
+                        })
+                    ]
+                )
+            ]
+        };
+        s.resolve(context, scene)
+    }
+}
+
 /// Creates a rich semantic alert box scene.
 pub fn luma_alert(
     title: impl Into<String>,
@@ -57,63 +178,9 @@ pub fn luma_alert(
     variant: AlertVariant,
     font: Handle<Font>,
     icon_font: Handle<Font>,
-) -> impl Scene {
-    let title = title.into();
-    let description = description.into();
-    let (bg_color, border_color, accent_color, icon_char) = variant.colors();
-
-    bsn! {
-        LumaAlert {
-            variant,
-        }
-        UNode {
-            width: UVal::Percent(1.0),
-            padding: USides::all(16.0),
-            background_color: bg_color,
-            border_radius: UCornerRadius::all(8.0),
-        }
-        UBorder {
-            color: border_color,
-            width: 1.0,
-            radius: UCornerRadius::all(8.0),
-        }
-        ULayout {
-            display: UDisplay::Flex,
-            flex_direction: UFlexDirection::Row,
-            gap: 14.0,
-            align_items: UAlignItems::FlexStart,
-        }
-        Children [
-            // Status Icon
-            (UText {
-                text: { icon_char.to_string() },
-                font_size: 20.0,
-                font: icon_font,
-                color: accent_color,
-            }),
-            // Text Column (Title + Description)
-            (
-                UNode::default()
-                ULayout {
-                    display: UDisplay::Flex,
-                    flex_direction: UFlexDirection::Column,
-                    gap: 4.0,
-                }
-                Children [
-                    (UText {
-                        text: title,
-                        font_size: 14.0,
-                        font: { font.clone() },
-                        color: Color::WHITE,
-                    }),
-                    (UText {
-                        text: description,
-                        font_size: 13.0,
-                        font,
-                        color: Color::srgb(0.75, 0.80, 0.88),
-                    })
-                ]
-            )
-        ]
-    }
+) -> Alert {
+    Alert::new(title, description)
+        .variant(variant)
+        .font(font)
+        .icon_font(icon_font)
 }

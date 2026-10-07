@@ -62,44 +62,156 @@ impl AvatarStatus {
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaAvatar;
 
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
+
+/// Declarative Avatar widget struct with all configurable properties.
+#[derive(Clone, Debug, Reflect)]
+pub struct Avatar {
+    pub initials: String,
+    pub size: AvatarSize,
+    pub status: Option<AvatarStatus>,
+    pub font: Handle<Font>,
+}
+
+impl Default for Avatar {
+    fn default() -> Self {
+        Self {
+            initials: String::new(),
+            size: AvatarSize::Medium,
+            status: None,
+            font: Handle::default(),
+        }
+    }
+}
+
+impl Avatar {
+    pub fn new(initials: impl Into<String>) -> Self {
+        Self {
+            initials: initials.into(),
+            ..default()
+        }
+    }
+
+    pub fn size(mut self, size: AvatarSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn status(mut self, status: AvatarStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    pub fn font(mut self, font: Handle<Font>) -> Self {
+        self.font = font;
+        self
+    }
+}
+
+impl Scene for Avatar {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let initials = self.initials;
+        let dim = self.size.size_px();
+        let radius = dim * 0.5;
+        let font_size = self.size.font_size();
+        let font = self.font;
+
+        if let Some(status) = self.status {
+            let status_dim = self.size.status_size();
+            let status_radius = status_dim * 0.5;
+            let status_color = status.color();
+
+            let s = bsn! {
+                LumaAvatar
+                UNode {
+                    width: { UVal::Px(dim) },
+                    height: { UVal::Px(dim) },
+                    background_color: Color::srgb(0.18, 0.24, 0.36),
+                    border_radius: { UCornerRadius::all(radius) },
+                }
+                UBorder {
+                    color: Color::srgb(0.30, 0.40, 0.58),
+                    width: 1.5,
+                    radius: { UCornerRadius::all(radius) },
+                }
+                ULayout {
+                    display: UDisplay::Flex,
+                    justify_content: UJustifyContent::Center,
+                    align_items: UAlignItems::Center,
+                }
+                Children [
+                    (UText {
+                        text: initials,
+                        font_size,
+                        font,
+                        color: Color::srgb(0.92, 0.95, 1.00),
+                    }),
+                    // Status Presence Dot
+                    (
+                        UNode {
+                            width: { UVal::Px(status_dim) },
+                            height: { UVal::Px(status_dim) },
+                            background_color: status_color,
+                            border_radius: { UCornerRadius::all(status_radius) },
+                        }
+                        UBorder {
+                            color: Color::srgb(0.08, 0.10, 0.14),
+                            width: 1.5,
+                            radius: { UCornerRadius::all(status_radius) },
+                        }
+                        USelf {
+                            position_type: UPositionType::Absolute,
+                            right: { UVal::Px(0.0) },
+                            bottom: { UVal::Px(0.0) },
+                        }
+                    )
+                ]
+            };
+            s.resolve(context, scene)
+        } else {
+            let s = bsn! {
+                LumaAvatar
+                UNode {
+                    width: { UVal::Px(dim) },
+                    height: { UVal::Px(dim) },
+                    background_color: Color::srgb(0.18, 0.24, 0.36),
+                    border_radius: { UCornerRadius::all(radius) },
+                }
+                UBorder {
+                    color: Color::srgb(0.30, 0.40, 0.58),
+                    width: 1.5,
+                    radius: { UCornerRadius::all(radius) },
+                }
+                ULayout {
+                    display: UDisplay::Flex,
+                    justify_content: UJustifyContent::Center,
+                    align_items: UAlignItems::Center,
+                }
+                Children [
+                    (UText {
+                        text: initials,
+                        font_size,
+                        font,
+                        color: Color::srgb(0.92, 0.95, 1.00),
+                    })
+                ]
+            };
+            s.resolve(context, scene)
+        }
+    }
+}
+
 /// Creates a user avatar scene with initials fallback.
 pub fn luma_avatar(
     initials: impl Into<String>,
     size: AvatarSize,
     font: Handle<Font>,
-) -> impl Scene {
-    let initials = initials.into();
-    let dim = size.size_px();
-    let radius = dim * 0.5;
-    let font_size = size.font_size();
-
-    bsn! {
-        LumaAvatar
-        UNode {
-            width: UVal::Px(dim),
-            height: UVal::Px(dim),
-            background_color: Color::srgb(0.18, 0.24, 0.36),
-            border_radius: UCornerRadius::all(radius),
-        }
-        UBorder {
-            color: Color::srgb(0.30, 0.40, 0.58),
-            width: 1.5,
-            radius: UCornerRadius::all(radius),
-        }
-        ULayout {
-            display: UDisplay::Flex,
-            justify_content: UJustifyContent::Center,
-            align_items: UAlignItems::Center,
-        }
-        Children [
-            (UText {
-                text: initials,
-                font_size,
-                font,
-                color: Color::srgb(0.92, 0.95, 1.00),
-            })
-        ]
-    }
+) -> Avatar {
+    Avatar::new(initials).size(size).font(font)
 }
 
 /// Creates a user avatar scene with an active presence status badge dot.
@@ -108,59 +220,6 @@ pub fn luma_avatar_with_status(
     size: AvatarSize,
     status: AvatarStatus,
     font: Handle<Font>,
-) -> impl Scene {
-    let initials = initials.into();
-    let dim = size.size_px();
-    let radius = dim * 0.5;
-    let font_size = size.font_size();
-    let status_dim = size.status_size();
-    let status_radius = status_dim * 0.5;
-    let status_color = status.color();
-
-    bsn! {
-        LumaAvatar
-        UNode {
-            width: UVal::Px(dim),
-            height: UVal::Px(dim),
-            background_color: Color::srgb(0.18, 0.24, 0.36),
-            border_radius: UCornerRadius::all(radius),
-        }
-        UBorder {
-            color: Color::srgb(0.30, 0.40, 0.58),
-            width: 1.5,
-            radius: UCornerRadius::all(radius),
-        }
-        ULayout {
-            display: UDisplay::Flex,
-            justify_content: UJustifyContent::Center,
-            align_items: UAlignItems::Center,
-        }
-        Children [
-            (UText {
-                text: initials,
-                font_size,
-                font,
-                color: Color::srgb(0.92, 0.95, 1.00),
-            }),
-            // Status Presence Dot
-            (
-                UNode {
-                    width: UVal::Px(status_dim),
-                    height: UVal::Px(status_dim),
-                    background_color: status_color,
-                    border_radius: UCornerRadius::all(status_radius),
-                }
-                UBorder {
-                    color: Color::srgb(0.08, 0.10, 0.14), // Gap ring
-                    width: 1.5,
-                    radius: UCornerRadius::all(status_radius),
-                }
-                USelf {
-                    position_type: UPositionType::Absolute,
-                    right: { UVal::Px(0.0) },
-                    bottom: { UVal::Px(0.0) },
-                }
-            )
-        ]
-    }
+) -> Avatar {
+    Avatar::new(initials).size(size).status(status).font(font)
 }

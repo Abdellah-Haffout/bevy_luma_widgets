@@ -1,7 +1,10 @@
-//! Interactive button widget with variants, sizes, and icon support.
+//! Interactive button widget with variants, sizes, styles, and icon support.
 
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::theme::ButtonStyle;
 
 /// Styling variant for buttons.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
@@ -144,60 +147,233 @@ impl ButtonVariant {
     }
 }
 
+/// Declarative Button widget struct with all configurable properties.
+#[derive(Clone, Debug, Reflect)]
+pub struct Button {
+    pub label: String,
+    pub variant: ButtonVariant,
+    pub size: ButtonSize,
+    pub icon: Option<String>,
+    pub font: Handle<Font>,
+    pub icon_font: Handle<Font>,
+    pub style: Option<ButtonStyle>,
+    pub disabled: bool,
+}
+
+impl Default for Button {
+    fn default() -> Self {
+        Self {
+            label: String::new(),
+            variant: ButtonVariant::Primary,
+            size: ButtonSize::Medium,
+            icon: None,
+            font: Handle::default(),
+            icon_font: Handle::default(),
+            style: None,
+            disabled: false,
+        }
+    }
+}
+
+impl Button {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self {
+            label: label.into(),
+            ..default()
+        }
+    }
+
+    pub fn variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    pub fn primary(self) -> Self {
+        self.variant(ButtonVariant::Primary)
+    }
+
+    pub fn secondary(self) -> Self {
+        self.variant(ButtonVariant::Secondary)
+    }
+
+    pub fn outline(self) -> Self {
+        self.variant(ButtonVariant::Outline)
+    }
+
+    pub fn ghost(self) -> Self {
+        self.variant(ButtonVariant::Ghost)
+    }
+
+    pub fn danger(self) -> Self {
+        self.variant(ButtonVariant::Danger)
+    }
+
+    pub fn size(mut self, size: ButtonSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn small(self) -> Self {
+        self.size(ButtonSize::Small)
+    }
+
+    pub fn medium(self) -> Self {
+        self.size(ButtonSize::Medium)
+    }
+
+    pub fn large(self) -> Self {
+        self.size(ButtonSize::Large)
+    }
+
+    pub fn icon(mut self, icon: impl Into<String>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+
+    pub fn font(mut self, font: Handle<Font>) -> Self {
+        self.font = font;
+        self
+    }
+
+    pub fn icon_font(mut self, icon_font: Handle<Font>) -> Self {
+        self.icon_font = icon_font;
+        self
+    }
+
+    pub fn style(mut self, style: ButtonStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl Scene for Button {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let (bg_normal, bg_hover, bg_pressed, border_color, border_width, text_color, radius, padding, min_height, font_size) =
+            if let Some(ref s) = self.style {
+                (
+                    s.bg_normal,
+                    s.bg_hover,
+                    s.bg_pressed,
+                    s.border_color,
+                    s.border_width,
+                    s.text_color,
+                    s.radius,
+                    s.padding,
+                    s.min_height,
+                    s.font_size,
+                )
+            } else {
+                let c = self.variant.colors();
+                (
+                    c.bg_normal,
+                    c.bg_hover,
+                    c.bg_pressed,
+                    c.border_color,
+                    c.border_width,
+                    c.text_color,
+                    self.size.radius(),
+                    self.size.padding(),
+                    self.size.min_height(),
+                    self.size.font_size(),
+                )
+            };
+
+        let icon_size = self.size.icon_size();
+        let icon_text = self.icon.clone().unwrap_or_default();
+        let has_icon = self.icon.is_some();
+        let has_label = !self.label.is_empty();
+        let variant = self.variant;
+        let size = self.size;
+        let disabled = self.disabled;
+        let icon_font = self.icon_font;
+        let label = self.label;
+        let font = self.font;
+
+        let s = bsn! {
+            LumaButton {
+                variant,
+                size,
+                disabled,
+            }
+            UNode {
+                min_height,
+                background_color: bg_normal,
+                border_radius: UCornerRadius::all(radius),
+                padding,
+            }
+            UBorder {
+                color: border_color,
+                width: border_width,
+                radius: UCornerRadius::all(radius),
+            }
+            UInteraction::default()
+            UInteractionColors {
+                normal: bg_normal,
+                hovered: bg_hover,
+                pressed: bg_pressed,
+            }
+            UFocusable::new()
+            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            ULayout {
+                display: UDisplay::Flex,
+                flex_direction: UFlexDirection::Row,
+                justify_content: UJustifyContent::Center,
+                align_items: UAlignItems::Center,
+                gap: 8.0,
+            }
+            Children [
+                (
+                    UNode::default()
+                    ULayout {
+                        display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
+                    }
+                    Children [
+                        (UText {
+                            text: icon_text,
+                            font_size: icon_size,
+                            font: icon_font,
+                            color: text_color,
+                        })
+                    ]
+                ),
+                (
+                    UNode::default()
+                    ULayout {
+                        display: { if has_label { UDisplay::Flex } else { UDisplay::None } },
+                    }
+                    Children [
+                        (UText {
+                            text: label,
+                            font_size,
+                            font,
+                            color: text_color,
+                        })
+                    ]
+                )
+            ]
+        };
+
+        s.resolve(context, scene)
+    }
+}
+
 /// Creates a standard text button scene.
 pub fn luma_button(
     label: impl Into<String>,
     variant: ButtonVariant,
     size: ButtonSize,
     font: Handle<Font>,
-) -> impl Scene {
-    let label = label.into();
-    let colors = variant.colors();
-    let padding = size.padding();
-    let font_size = size.font_size();
-    let radius = size.radius();
-    let min_height = size.min_height();
-
-    bsn! {
-        LumaButton {
-            variant,
-            size,
-            disabled: false,
-        }
-        UNode {
-            min_height,
-            background_color: { colors.bg_normal },
-            border_radius: { UCornerRadius::all(radius) },
-            padding: { padding },
-        }
-        UBorder {
-            color: { colors.border_color },
-            width: { colors.border_width },
-            radius: { UCornerRadius::all(radius) },
-        }
-        UInteraction::default()
-        UInteractionColors {
-            normal: { colors.bg_normal },
-            hovered: { colors.bg_hover },
-            pressed: { colors.bg_pressed },
-        }
-        UFocusable::new()
-        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-        ULayout {
-            display: UDisplay::Flex,
-            flex_direction: UFlexDirection::Row,
-            justify_content: UJustifyContent::Center,
-            align_items: UAlignItems::Center,
-        }
-        Children [
-            (UText {
-                text: label,
-                font_size,
-                font,
-                color: { colors.text_color },
-            })
-        ]
-    }
+) -> Button {
+    Button::new(label).variant(variant).size(size).font(font)
 }
 
 /// Creates a button scene with a leading icon.
@@ -208,117 +384,27 @@ pub fn luma_button_with_icon(
     size: ButtonSize,
     font: Handle<Font>,
     icon_font: Handle<Font>,
-) -> impl Scene {
-    let label = label.into();
-    let icon = icon.to_string();
-    let colors = variant.colors();
-    let padding = size.padding();
-    let font_size = size.font_size();
-    let icon_size = size.icon_size();
-    let radius = size.radius();
-    let min_height = size.min_height();
-
-    bsn! {
-        LumaButton {
-            variant,
-            size,
-            disabled: false,
-        }
-        UNode {
-            min_height,
-            background_color: { colors.bg_normal },
-            border_radius: { UCornerRadius::all(radius) },
-            padding: { padding },
-        }
-        UBorder {
-            color: { colors.border_color },
-            width: { colors.border_width },
-            radius: { UCornerRadius::all(radius) },
-        }
-        UInteraction::default()
-        UInteractionColors {
-            normal: { colors.bg_normal },
-            hovered: { colors.bg_hover },
-            pressed: { colors.bg_pressed },
-        }
-        UFocusable::new()
-        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-        ULayout {
-            display: UDisplay::Flex,
-            flex_direction: UFlexDirection::Row,
-            justify_content: UJustifyContent::Center,
-            align_items: UAlignItems::Center,
-            gap: 8.0,
-        }
-        Children [
-            (UText {
-                text: icon,
-                font_size: icon_size,
-                font: icon_font,
-                color: { colors.text_color },
-            }),
-            (UText {
-                text: label,
-                font_size,
-                font,
-                color: { colors.text_color },
-            })
-        ]
-    }
+) -> Button {
+    Button::new(label)
+        .icon(icon)
+        .variant(variant)
+        .size(size)
+        .font(font)
+        .icon_font(icon_font)
 }
 
-/// Creates an icon-only square button scene.
+/// Creates an icon-only button scene.
 pub fn luma_icon_button(
     icon: &str,
     variant: ButtonVariant,
     size: ButtonSize,
     icon_font: Handle<Font>,
-) -> impl Scene {
-    let icon = icon.to_string();
-    let colors = variant.colors();
-    let icon_size = size.icon_size();
-    let radius = size.radius();
-    let dimension = size.min_height();
-
-    bsn! {
-        LumaButton {
-            variant,
-            size,
-            disabled: false,
-        }
-        UNode {
-            width: { UVal::Px(dimension) },
-            height: { UVal::Px(dimension) },
-            background_color: { colors.bg_normal },
-            border_radius: { UCornerRadius::all(radius) },
-        }
-        UBorder {
-            color: { colors.border_color },
-            width: { colors.border_width },
-            radius: { UCornerRadius::all(radius) },
-        }
-        UInteraction::default()
-        UInteractionColors {
-            normal: { colors.bg_normal },
-            hovered: { colors.bg_hover },
-            pressed: { colors.bg_pressed },
-        }
-        UFocusable::new()
-        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-        ULayout {
-            display: UDisplay::Flex,
-            justify_content: UJustifyContent::Center,
-            align_items: UAlignItems::Center,
-        }
-        Children [
-            (UText {
-                text: icon,
-                font_size: icon_size,
-                font: icon_font,
-                color: { colors.text_color },
-            })
-        ]
-    }
+) -> Button {
+    Button::default()
+        .icon(icon)
+        .variant(variant)
+        .size(size)
+        .icon_font(icon_font)
 }
 
 fn on_button_pointer_click(
