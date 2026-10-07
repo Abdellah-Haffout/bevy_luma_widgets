@@ -251,7 +251,9 @@ fn dismiss_chip(
         current = parent.get();
         if chip_query.contains(current) {
             commands.trigger(ChipDismissed(current));
-            commands.entity(current).despawn();
+            if let Ok(mut cmd) = commands.get_entity(current) {
+                cmd.despawn();
+            }
             break;
         }
     }

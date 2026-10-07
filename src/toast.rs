@@ -423,7 +423,9 @@ fn dismiss_toast(
         current = parent.get();
         if toast_query.contains(current) {
             commands.trigger(ToastDismissed(current));
-            commands.entity(current).despawn();
+            if let Ok(mut cmd) = commands.get_entity(current) {
+                cmd.despawn();
+            }
             break;
         }
     }
@@ -470,7 +472,9 @@ fn toast_timer_system(
         toast_timer.timer.tick(time.delta());
         if toast_timer.timer.just_finished() {
             commands.trigger(ToastDismissed(entity));
-            commands.entity(entity).despawn();
+            if let Ok(mut cmd) = commands.get_entity(entity) {
+                cmd.despawn();
+            }
         }
     }
 }

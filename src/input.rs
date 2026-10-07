@@ -75,7 +75,9 @@ impl TextInput {
             ..default()
         };
         let entity = spawn_text_input(commands, input);
-        commands.entity(entity).insert(LumaInput);
+        if let Ok(mut cmd) = commands.get_entity(entity) {
+            cmd.insert(LumaInput);
+        }
         entity
     }
 }
