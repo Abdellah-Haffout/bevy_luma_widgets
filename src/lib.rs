@@ -41,6 +41,7 @@ pub mod chip;
 pub mod divider;
 pub mod input;
 pub mod kbd;
+pub mod macros;
 pub mod modal;
 pub mod progress;
 pub mod radio;
@@ -66,7 +67,7 @@ pub mod prelude {
 
     pub use crate::{
         accordion::*, alert::*, avatar::*, badge::*, breadcrumb::*, button::*, card::*,
-        checkbox::*, chip::*, divider::*, input::*, kbd::*, modal::*, progress::*, radio::*,
+        checkbox::*, chip::*, divider::*, input::*, kbd::*, macros::*, modal::*, progress::*, radio::*,
         rating::*, segmented_control::*, skeleton::*, slider::*, stat::*, stepper::*, swatch::*,
         tabs::*, theme::*, toast::*, toggle::*, tooltip::*, LumaWidgetsPlugin,
     };
