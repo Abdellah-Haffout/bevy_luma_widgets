@@ -108,62 +108,57 @@ impl Scene for Modal {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (
-                    UNode {
-                        width: { UVal::Px(width) },
-                        background_color: Color::srgb(0.11, 0.13, 0.18),
-                        border_radius: UCornerRadius::all(14.0),
-                        padding: USides::all(24.0),
+                UNode {
+                    width: { UVal::Px(width) },
+                    background_color: Color::srgb(0.11, 0.13, 0.18),
+                    border_radius: UCornerRadius::all(14.0),
+                    padding: USides::all(24.0),
+                }
+                UBorder {
+                    color: Color::srgb(0.22, 0.26, 0.36),
+                    width: 1.0,
+                    radius: UCornerRadius::all(14.0),
+                }
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Column,
+                    gap: 16.0,
+                }
+                Children [
+                    // Title
+                    UText {
+                        text: title,
+                        font_size: 18.0,
+                        font: { font.clone() },
+                        color: Color::srgb(0.96, 0.97, 0.99),
                     }
-                    UBorder {
-                        color: Color::srgb(0.22, 0.26, 0.36),
-                        width: 1.0,
-                        radius: UCornerRadius::all(14.0),
+                    --
+                    // Description
+                    UText {
+                        text: description,
+                        font_size: 14.0,
+                        font: { font.clone() },
+                        color: Color::srgb(0.65, 0.70, 0.80),
+                    }
+                    --
+                    // Actions row
+                    UNode {
+                        width: UVal::Percent(1.0),
                     }
                     ULayout {
                         display: UDisplay::Flex,
-                        flex_direction: UFlexDirection::Column,
-                        gap: 16.0,
+                        flex_direction: UFlexDirection::Row,
+                        justify_content: UJustifyContent::End,
+                        gap: 10.0,
                     }
                     Children [
-                        // Title
-                        (UText {
-                            text: title,
-                            font_size: 18.0,
-                            font: { font.clone() },
-                            color: Color::srgb(0.96, 0.97, 0.99),
-                        }),
-                        // Description
-                        (UText {
-                            text: description,
-                            font_size: 14.0,
-                            font: { font.clone() },
-                            color: Color::srgb(0.65, 0.70, 0.80),
-                        }),
-                        // Actions row
-                        (
-                            UNode {
-                                width: UVal::Percent(1.0),
-                            }
-                            ULayout {
-                                display: UDisplay::Flex,
-                                flex_direction: UFlexDirection::Row,
-                                justify_content: UJustifyContent::End,
-                                gap: 10.0,
-                            }
-                            Children [
-                                (
-                                    LumaModalCancel
-                                    luma_button(cancel_label, ButtonVariant::Secondary, ButtonSize::Medium, font.clone())
-                                ),
-                                (
-                                    LumaModalConfirm
-                                    luma_button(confirm_label, ButtonVariant::Primary, ButtonSize::Medium, font)
-                                )
-                            ]
-                        )
+                        LumaModalCancel
+                        @{ luma_button(cancel_label, ButtonVariant::Secondary, ButtonSize::Medium, font.clone()) }
+                        --
+                        LumaModalConfirm
+                        @{ luma_button(confirm_label, ButtonVariant::Primary, ButtonSize::Medium, font) }
                     ]
-                )
+                ]
             ]
         };
         s.resolve(context, scene)

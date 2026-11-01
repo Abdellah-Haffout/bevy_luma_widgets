@@ -128,6 +128,11 @@ impl Scene for Radio {
                 radius: UCornerRadius::all(10.0),
             }
             UInteraction::default()
+            UInteractionColors {
+                normal: CIRCLE_BG,
+                hovered: Color::srgb(0.22, 0.26, 0.35),
+                pressed: Color::srgb(0.14, 0.17, 0.24),
+            }
             UFocusable::new()
             UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
             ULayout {
@@ -136,15 +141,13 @@ impl Scene for Radio {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (
-                    LumaRadioDot
-                    UNode {
-                        width: UVal::Px(10.0),
-                        height: UVal::Px(10.0),
-                        background_color: dot_color,
-                        border_radius: UCornerRadius::all(5.0),
-                    }
-                )
+                LumaRadioDot
+                UNode {
+                    width: UVal::Px(10.0),
+                    height: UVal::Px(10.0),
+                    background_color: dot_color,
+                    border_radius: UCornerRadius::all(5.0),
+                }
             ]
         };
 
@@ -152,6 +155,7 @@ impl Scene for Radio {
             let font = self.font;
             let container = bsn! {
                 UNode::default()
+                UInteraction::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
@@ -159,13 +163,14 @@ impl Scene for Radio {
                     gap: 10.0,
                 }
                 Children [
-                    circle_node,
-                    (UText {
+                    @{circle_node}
+                    --
+                    UText {
                         text: label_str,
                         font_size: 14.0,
                         font,
                         color: Color::srgb(0.92, 0.94, 0.98),
-                    })
+                    }
                 ]
             };
             container.resolve(context, scene)
@@ -254,7 +259,7 @@ fn select_radio(
 }
 
 fn on_radio_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     mut all_radios: Query<(
         Entity,
@@ -264,11 +269,24 @@ fn on_radio_click(
         Option<&mut UFocusVisual>,
     )>,
     mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    select_radio(trigger.entity.entity(), &mut commands, &mut all_radios, &mut dot_query);
+    let target = if all_radios.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| all_radios.contains(e)) {
+        Some(ancestor)
+    } else if let Ok(children) = children_query.get(trigger.entity) {
+        children.iter().find(|&e| all_radios.contains(e))
+    } else {
+        None
+    };
+    if let Some(entity) = target {
+        select_radio(entity, &mut commands, &mut all_radios, &mut dot_query);
+    }
 }
 
 fn on_radio_activate(
@@ -282,8 +300,21 @@ fn on_radio_activate(
         Option<&mut UFocusVisual>,
     )>,
     mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
 ) {
-    select_radio(trigger.entity, &mut commands, &mut all_radios, &mut dot_query);
+    let target = if all_radios.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| all_radios.contains(e)) {
+        Some(ancestor)
+    } else if let Ok(children) = children_query.get(trigger.entity) {
+        children.iter().find(|&e| all_radios.contains(e))
+    } else {
+        None
+    };
+    if let Some(entity) = target {
+        select_radio(entity, &mut commands, &mut all_radios, &mut dot_query);
+    }
 }
 
 pub struct LumaRadioPlugin;

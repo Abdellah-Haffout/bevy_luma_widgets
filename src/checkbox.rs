@@ -115,6 +115,8 @@ impl Scene for Checkbox {
         let disabled = self.disabled;
         let icon_font = self.icon_font;
         let font = self.font;
+        let bg_hover = if self.is_checked { Color::srgb(0.28, 0.55, 1.00) } else { Color::srgb(0.24, 0.28, 0.36) };
+        let bg_pressed = if self.is_checked { Color::srgb(0.14, 0.35, 0.75) } else { Color::srgb(0.12, 0.15, 0.20) };
 
         let box_node = bsn! {
             LumaCheckbox {
@@ -133,6 +135,11 @@ impl Scene for Checkbox {
                 radius: UCornerRadius::all(5.0),
             }
             UInteraction::default()
+            UInteractionColors {
+                normal: bg,
+                hovered: bg_hover,
+                pressed: bg_pressed,
+            }
             UFocusable::new()
             UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
             ULayout {
@@ -141,21 +148,20 @@ impl Scene for Checkbox {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (
-                    LumaCheckmark
-                    UText {
-                        text: { Icon::CHECK.to_string() },
-                        font_size: 13.0,
-                        font: icon_font,
-                        color: icon_color,
-                    }
-                )
+                LumaCheckmark
+                UText {
+                    text: { Icon::CHECK.to_string() },
+                    font_size: 13.0,
+                    font: icon_font,
+                    color: icon_color,
+                }
             ]
         };
 
         if let Some(label_text) = self.label {
             let container = bsn! {
                 UNode::default()
+                UInteraction::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
@@ -163,13 +169,14 @@ impl Scene for Checkbox {
                     gap: 10.0,
                 }
                 Children [
-                    box_node,
-                    (UText {
+                    @{box_node}
+                    --
+                    UText {
                         text: label_text,
                         font_size: 14.0,
                         font,
                         color: Color::srgb(0.92, 0.94, 0.98),
-                    })
+                    }
                 ]
             };
             container.resolve(context, scene)
@@ -203,10 +210,11 @@ fn toggle_checkbox(
         &mut UBorder,
         Option<&Children>,
         Option<&mut UFocusVisual>,
+        Option<&mut UInteractionColors>,
     )>,
     text_query: &mut Query<&mut UText, With<LumaCheckmark>>,
 ) {
-    if let Ok((mut checkbox, mut node, mut border, children, mut visual_opt)) = query.get_mut(entity) {
+    if let Ok((mut checkbox, mut node, mut border, children, mut visual_opt, mut colors_opt)) = query.get_mut(entity) {
         if checkbox.disabled {
             return;
         }
@@ -216,6 +224,18 @@ fn toggle_checkbox(
 
         node.background_color = if is_checked { CHECKED_BG } else { UNCHECKED_BG };
         let new_border = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+
+        if let Some(ref mut colors) = colors_opt {
+            if is_checked {
+                colors.normal = CHECKED_BG;
+                colors.hovered = Color::srgb(0.28, 0.55, 1.00);
+                colors.pressed = Color::srgb(0.14, 0.35, 0.75);
+            } else {
+                colors.normal = UNCHECKED_BG;
+                colors.hovered = Color::srgb(0.24, 0.28, 0.36);
+                colors.pressed = Color::srgb(0.12, 0.15, 0.20);
+            }
+        }
 
         if let Some(ref mut visual) = visual_opt {
             if visual.is_captured() {
@@ -245,7 +265,7 @@ fn toggle_checkbox(
 }
 
 fn on_checkbox_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     mut query: Query<(
         &mut LumaCheckbox,
@@ -253,13 +273,27 @@ fn on_checkbox_click(
         &mut UBorder,
         Option<&Children>,
         Option<&mut UFocusVisual>,
+        Option<&mut UInteractionColors>,
     )>,
     mut text_query: Query<&mut UText, With<LumaCheckmark>>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    toggle_checkbox(trigger.entity.entity(), &mut commands, &mut query, &mut text_query);
+    let target = if query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e)) {
+        Some(ancestor)
+    } else if let Ok(children) = children_query.get(trigger.entity) {
+        children.iter().find(|&e| query.contains(e))
+    } else {
+        None
+    };
+    if let Some(entity) = target {
+        toggle_checkbox(entity, &mut commands, &mut query, &mut text_query);
+    }
 }
 
 fn on_checkbox_activate(
@@ -271,10 +305,24 @@ fn on_checkbox_activate(
         &mut UBorder,
         Option<&Children>,
         Option<&mut UFocusVisual>,
+        Option<&mut UInteractionColors>,
     )>,
     mut text_query: Query<&mut UText, With<LumaCheckmark>>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
 ) {
-    toggle_checkbox(trigger.entity, &mut commands, &mut query, &mut text_query);
+    let target = if query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e)) {
+        Some(ancestor)
+    } else if let Ok(children) = children_query.get(trigger.entity) {
+        children.iter().find(|&e| query.contains(e))
+    } else {
+        None
+    };
+    if let Some(entity) = target {
+        toggle_checkbox(entity, &mut commands, &mut query, &mut text_query);
+    }
 }
 
 pub struct LumaCheckboxPlugin;

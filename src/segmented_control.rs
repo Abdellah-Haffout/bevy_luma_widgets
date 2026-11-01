@@ -122,12 +122,12 @@ impl Scene for SegmentOption {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (UText {
+                UText {
                     text: label,
                     font_size: 13.0,
                     font,
                     color: text_color,
-                })
+                }
             ]
         };
         s.resolve(context, scene)
@@ -236,7 +236,7 @@ pub fn luma_segmented_control(
             gap: 2.0,
         }
         Children [
-            options
+            @{options}
         ]
     }
 }
@@ -291,7 +291,7 @@ fn switch_segment(
 }
 
 fn on_segment_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     parents_query: Query<&ChildOf>,
     mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, &Children)>,
@@ -302,7 +302,7 @@ fn on_segment_click(
         return;
     }
     switch_segment(
-        trigger.entity.entity(),
+        trigger.entity,
         &mut commands,
         &parents_query,
         &mut option_query,

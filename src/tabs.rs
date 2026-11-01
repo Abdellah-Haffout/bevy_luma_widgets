@@ -99,7 +99,9 @@ impl Scene for TabTrigger {
         let is_active = self.is_active;
         let font = self.font;
 
-        let bg = if is_active { TAB_ACTIVE_BG } else { TAB_INACTIVE_BG };
+        let bg_normal = if is_active { TAB_ACTIVE_BG } else { TAB_INACTIVE_BG };
+        let bg_hover = if is_active { Color::srgb(0.28, 0.55, 1.00) } else { Color::srgb(0.16, 0.20, 0.28) };
+        let bg_pressed = if is_active { Color::srgb(0.15, 0.38, 0.80) } else { Color::srgb(0.12, 0.15, 0.22) };
         let text_color = if is_active { TAB_ACTIVE_TEXT } else { TAB_INACTIVE_TEXT };
 
         let s = bsn! {
@@ -109,12 +111,17 @@ impl Scene for TabTrigger {
                 active: is_active,
             }
             UNode {
-                height: UVal::Px(32.0),
-                padding: USides::axes(14.0, 6.0),
-                background_color: bg,
+                height: UVal::Px(34.0),
+                padding: USides::axes(16.0, 7.0),
+                background_color: bg_normal,
                 border_radius: UCornerRadius::all(6.0),
             }
             UInteraction::default()
+            UInteractionColors {
+                normal: bg_normal,
+                hovered: bg_hover,
+                pressed: bg_pressed,
+            }
             UFocusable::new()
             UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
             ULayout {
@@ -123,12 +130,12 @@ impl Scene for TabTrigger {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (UText {
+                UText {
                     text: label,
                     font_size: 13.0,
                     font,
                     color: text_color,
-                })
+                }
             ]
         };
         s.resolve(context, scene)
@@ -182,7 +189,7 @@ pub fn luma_tab_trigger(
 pub fn luma_tab_list(triggers: impl Scene) -> impl Scene {
     bsn! {
         UNode {
-            background_color: Color::srgb(0.12, 0.15, 0.20),
+            background_color: Color::srgb(0.09, 0.11, 0.15),
             border_radius: UCornerRadius::all(8.0),
             padding: USides::all(4.0),
         }
@@ -195,10 +202,10 @@ pub fn luma_tab_list(triggers: impl Scene) -> impl Scene {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Row,
             align_items: UAlignItems::Center,
-            gap: 4.0,
+            gap: 6.0,
         }
         Children [
-            triggers
+            @{triggers}
         ]
     }
 }
@@ -206,11 +213,11 @@ pub fn luma_tab_list(triggers: impl Scene) -> impl Scene {
 fn switch_tab(
     target_entity: Entity,
     commands: &mut Commands,
-    mut triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children)>,
+    mut triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
     mut contents: Query<(&LumaTabContent, &mut ULayout)>,
     mut text_query: Query<&mut UText>,
 ) {
-    let Ok((_, target_trigger, _, _)) = triggers.get(target_entity) else {
+    let Ok((_, target_trigger, _, _, _)) = triggers.get(target_entity) else {
         return;
     };
 
@@ -218,11 +225,23 @@ fn switch_tab(
     let target_value = target_trigger.value.clone();
 
     // 1. Update triggers
-    for (entity, mut trigger, mut node, children) in triggers.iter_mut() {
+    for (entity, mut trigger, mut node, children, mut colors_opt) in triggers.iter_mut() {
         if trigger.group == group {
             let is_active = entity == target_entity;
             trigger.active = is_active;
             node.background_color = if is_active { TAB_ACTIVE_BG } else { TAB_INACTIVE_BG };
+
+            if let Some(ref mut colors) = colors_opt {
+                if is_active {
+                    colors.normal = TAB_ACTIVE_BG;
+                    colors.hovered = Color::srgb(0.28, 0.55, 1.00);
+                    colors.pressed = Color::srgb(0.15, 0.38, 0.80);
+                } else {
+                    colors.normal = TAB_INACTIVE_BG;
+                    colors.hovered = Color::srgb(0.18, 0.22, 0.30);
+                    colors.pressed = Color::srgb(0.14, 0.17, 0.24);
+                }
+            }
 
             let text_color = if is_active { TAB_ACTIVE_TEXT } else { TAB_INACTIVE_TEXT };
             for child in children.iter() {
@@ -252,35 +271,51 @@ fn switch_tab(
 }
 
 fn on_tab_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
-    triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children)>,
+    triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
     contents: Query<(&LumaTabContent, &mut ULayout)>,
     text_query: Query<&mut UText>,
+    parents_query: Query<&ChildOf>,
 ) {
-    switch_tab(
-        trigger.entity.entity(),
-        &mut commands,
-        triggers,
-        contents,
-        text_query,
-    );
+    let target = if triggers.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query.iter_ancestors(trigger.entity).find(|&e| triggers.contains(e))
+    };
+    if let Some(target_entity) = target {
+        switch_tab(
+            target_entity,
+            &mut commands,
+            triggers,
+            contents,
+            text_query,
+        );
+    }
 }
 
 fn on_tab_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
-    triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children)>,
+    triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
     contents: Query<(&LumaTabContent, &mut ULayout)>,
     text_query: Query<&mut UText>,
+    parents_query: Query<&ChildOf>,
 ) {
-    switch_tab(
-        trigger.entity,
-        &mut commands,
-        triggers,
-        contents,
-        text_query,
-    );
+    let target = if triggers.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query.iter_ancestors(trigger.entity).find(|&e| triggers.contains(e))
+    };
+    if let Some(target_entity) = target {
+        switch_tab(
+            target_entity,
+            &mut commands,
+            triggers,
+            contents,
+            text_query,
+        );
+    }
 }
 
 pub struct LumaTabsPlugin;

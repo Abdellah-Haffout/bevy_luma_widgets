@@ -144,31 +144,30 @@ impl Scene for Avatar {
                     align_items: UAlignItems::Center,
                 }
                 Children [
-                    (UText {
+                    UText {
                         text: initials,
                         font_size,
                         font,
                         color: Color::srgb(0.92, 0.95, 1.00),
-                    }),
+                    }
+                    --
                     // Status Presence Dot
-                    (
-                        UNode {
-                            width: { UVal::Px(status_dim) },
-                            height: { UVal::Px(status_dim) },
-                            background_color: status_color,
-                            border_radius: { UCornerRadius::all(status_radius) },
-                        }
-                        UBorder {
-                            color: Color::srgb(0.08, 0.10, 0.14),
-                            width: 1.5,
-                            radius: { UCornerRadius::all(status_radius) },
-                        }
-                        USelf {
-                            position_type: UPositionType::Absolute,
-                            right: { UVal::Px(0.0) },
-                            bottom: { UVal::Px(0.0) },
-                        }
-                    )
+                    UNode {
+                        width: { UVal::Px(status_dim) },
+                        height: { UVal::Px(status_dim) },
+                        background_color: status_color,
+                        border_radius: { UCornerRadius::all(status_radius) },
+                    }
+                    UBorder {
+                        color: Color::srgb(0.08, 0.10, 0.14),
+                        width: 1.5,
+                        radius: { UCornerRadius::all(status_radius) },
+                    }
+                    USelf {
+                        position_type: UPositionType::Absolute,
+                        right: { UVal::Px(0.0) },
+                        bottom: { UVal::Px(0.0) },
+                    }
                 ]
             };
             s.resolve(context, scene)
@@ -192,12 +191,12 @@ impl Scene for Avatar {
                     align_items: UAlignItems::Center,
                 }
                 Children [
-                    (UText {
+                    UText {
                         text: initials,
                         font_size,
                         font,
                         color: Color::srgb(0.92, 0.95, 1.00),
-                    })
+                    }
                 ]
             };
             s.resolve(context, scene)

@@ -30,7 +30,7 @@ Every widget is designed from the ground up with **three core pillars**:
 | **Toggle** | Boolean switches | Animated sliding knob with spring lerp, automatic track color shift, pointer events. |
 | **Checkbox** | Multiple choice toggles | Checkmark indicator powered by Lucide icons, configurable text label. |
 | **Slider** | Continuous range inputs | Drag & click track hit-testing, dynamic fill bar, thumb knob, optional step rounding. |
-| **ProgressBar** | Visual progress indicators | Clamped 0.0 to 1.0 range, Default, Success, Warning, and Danger semantic color variants. |
+| **ProgressBar & CircularProgress** | Linear & circular progress | Continuous 0.0 to 1.0 range, circular ring indicator with real-time conic arc, Default, Success, Warning, and Danger semantic variants. |
 | **Badge** | Status pill indicators | Compact tags with Info, Success, Warning, Danger, and Neutral styles; optional icons. |
 | **Divider** | Content separation | Full-width horizontal, fixed vertical, and horizontal with embedded text labels. |
 | **Card** | Surface grouping | Elevated panel containers with GPU anti-aliased corner radiuses and subtle borders. |
@@ -52,6 +52,11 @@ Every widget is designed from the ground up with **three core pillars**:
 | **Skeleton** | Loading placeholders | Pulsing placeholder boxes for asynchronous content loading states. |
 | **Tabs** | Switchable view switcher | Tab list triggers with active highlight and synchronized content panels. |
 | **Tooltip** | Hover descriptions | Compact floating tooltip bubble with subtle borders. |
+| **Spinner** | Rotating activity loaders | Continuous rotation animation in Small, Medium, Large sizes. |
+| **Select** | Dropdown selection | Popup selection menu with Chevron trigger and option list. |
+| **ListItem** | Unified list row | Interactive row with leading icon/avatar, title, subtitle, trailing badges/actions. |
+| **Drawer** | Sliding panel sheets | Sliding overlays from Left, Right, Bottom, Top with backdrop dismissal. |
+| **Popover** | Floating anchored cards | Elevated contextual card overlays. |
 
 ---
 
@@ -259,14 +264,20 @@ app.add_observer(|trigger: On<SliderChanged>| {
 });
 ```
 
-### 5. Progress Bar
+### 5. Progress Indicators (Linear & Circular)
 
 ```rust
-// Declarative builder
+// Linear ProgressBar
 ({ ProgressBar::new(0.65).width(UVal::Px(280.0)).height(8.0).variant(ProgressVariant::Success) })
-
-// Convenience function
 (luma_progress_bar(0.65, UVal::Px(280.0), 8.0, ProgressVariant::Success))
+
+// Circular Progress Ring (Conic SDF Arc)
+({ CircularProgress::new(0.75).size(72.0).thickness(6.5).variant(ProgressVariant::Default).font(font.clone()) })
+({ CircularProgress::sm(0.60).font(font.clone()) }) // 36px diameter
+({ CircularProgress::md(0.75).font(font.clone()) }) // 64px diameter
+({ CircularProgress::lg(0.85).font(font.clone()) }) // 96px diameter
+({ CircularProgress::xl(0.92).font(font.clone()) }) // 128px diameter
+(luma_circular_progress(0.75, 72.0, ProgressVariant::Default))
 ```
 
 Variants: `ProgressVariant::Default`, `ProgressVariant::Success`, `ProgressVariant::Warning`, `ProgressVariant::Danger`.
@@ -497,14 +508,63 @@ app.add_observer(|trigger: On<SwatchSelected>| {
 
 ## Examples
 
-Run the included showcase examples:
+You can run individual dedicated examples for any widget in release mode:
 
 ```bash
-# Complete widget gallery
-cargo run --example widgets_gallery
+# Core interactive controls
+cargo run --release --example button
+cargo run --release --example toggle
+cargo run --release --example checkbox
+cargo run --release --example slider
+cargo run --release --example progress
+cargo run --release --example radio
+cargo run --release --example stepper
+cargo run --release --example drag_value
 
-# Realistic game settings dialog
-cargo run --example settings_dialog
+# Inputs & selectors
+cargo run --release --example input
+cargo run --release --example select
+cargo run --release --example segmented_control
+cargo run --release --example swatch
+cargo run --release --example rating
+
+# Feedback & status
+cargo run --release --example badge
+cargo run --release --example chip
+cargo run --release --example alert
+cargo run --release --example toast
+cargo run --release --example spinner
+cargo run --release --example skeleton
+
+# Layout & containers
+cargo run --release --example card
+cargo run --release --example divider
+cargo run --release --example modal
+cargo run --release --example drawer
+cargo run --release --example popover
+cargo run --release --example tooltip
+
+# Navigation & lists
+cargo run --release --example tabs
+cargo run --release --example breadcrumb
+cargo run --release --example list_item
+cargo run --release --example avatar
+cargo run --release --example kbd
+cargo run --release --example stat
+cargo run --release --example accordion
+
+# Component suites
+cargo run --release --example controls
+cargo run --release --example cards
+cargo run --release --example data_views
+cargo run --release --example navigation
+cargo run --release --example states
+
+# Master galleries
+cargo run --release --example all_widgets
+cargo run --release --example widgets_gallery
+cargo run --release --example settings_dialog
+cargo run --release --example roots_and_styles
 ```
 
 ---

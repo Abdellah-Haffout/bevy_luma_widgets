@@ -187,81 +187,78 @@ impl Scene for Toast {
                 }
                 Children [
                     // Status Icon Box
-                    (
-                        UNode {
-                            width: UVal::Px(24.0),
-                            height: UVal::Px(24.0),
+                    UNode {
+                        width: UVal::Px(24.0),
+                        height: UVal::Px(24.0),
+                    }
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                    }
+                    Children [
+                        UText {
+                            text: { icon.to_string() },
+                            font_size: 16.0,
+                            font: { icon_font.clone() },
+                            color: icon_color,
                         }
-                        ULayout {
-                            display: UDisplay::Flex,
-                            justify_content: UJustifyContent::Center,
-                            align_items: UAlignItems::Center,
-                        }
-                        Children [
-                            (UText {
-                                text: { icon.to_string() },
-                                font_size: 16.0,
-                                font: { icon_font.clone() },
-                                color: icon_color,
-                            })
-                        ]
-                    ),
+                    ]
+                    --
                     // Message Body (Title & Description)
-                    (
-                        UNode::default()
-                        USelf {
-                            flex_grow: { Some(1.0) },
+                    UNode::default()
+                    USelf {
+                        flex_grow: { Some(1.0) },
+                    }
+                    ULayout {
+                        display: UDisplay::Flex,
+                        flex_direction: UFlexDirection::Column,
+                        gap: 3.0,
+                    }
+                    Children [
+                        UText {
+                            text: title,
+                            font_size: 14.0,
+                            font: { font.clone() },
+                            color: TOAST_TITLE_COLOR,
                         }
-                        ULayout {
-                            display: UDisplay::Flex,
-                            flex_direction: UFlexDirection::Column,
-                            gap: 3.0,
+                        --
+                        UText {
+                            text: description,
+                            font_size: 12.0,
+                            font: { font.clone() },
+                            color: TOAST_DESC_COLOR,
                         }
-                        Children [
-                            (UText {
-                                text: title,
-                                font_size: 14.0,
-                                font: { font.clone() },
-                                color: TOAST_TITLE_COLOR,
-                            }),
-                            (UText {
-                                text: description,
-                                font_size: 12.0,
-                                font: { font.clone() },
-                                color: TOAST_DESC_COLOR,
-                            })
-                        ]
-                    ),
+                    ]
+                    --
                     // Close Button
-                    (
-                        LumaToastClose
-                        UNode {
-                            width: UVal::Px(20.0),
-                            height: UVal::Px(20.0),
-                            border_radius: UCornerRadius::all(4.0),
+                    LumaToastClose
+                    UNode {
+                        width: UVal::Px(20.0),
+                        height: UVal::Px(20.0),
+                        border_radius: UCornerRadius::all(4.0),
+                    }
+                    UInteraction::default()
+                    UInteractionColors {
+                        normal: Color::NONE,
+                        hovered: Color::srgba(1.0, 1.0, 1.0, 0.10),
+                        pressed: Color::srgba(1.0, 1.0, 1.0, 0.20),
+                    }
+                    UFocusable::new()
+                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                    }
+                    Children [
+                        UText {
+                            text: { Icon::X.to_string() },
+                            font_size: 13.0,
+                            font: icon_font,
+                            color: Color::srgb(0.60, 0.65, 0.75),
                         }
-                        UInteraction::default()
-                        UInteractionColors {
-                            normal: Color::NONE,
-                            hovered: Color::srgba(1.0, 1.0, 1.0, 0.10),
-                            pressed: Color::srgba(1.0, 1.0, 1.0, 0.20),
-                        }
-                        UFocusable::new()
-                        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
-                        ULayout {
-                            display: UDisplay::Flex,
-                            justify_content: UJustifyContent::Center,
-                            align_items: UAlignItems::Center,
-                        }
-                        Children [
-                            (UText {
-                                text: { Icon::X.to_string() },
-                                font_size: 13.0,
-                                font: icon_font,
-                                color: Color::srgb(0.60, 0.65, 0.75),
-                            })
-                        ]
-                    )
+                    ]
                 ]
             };
             s.resolve(context, scene)
@@ -287,81 +284,78 @@ impl Scene for Toast {
                 }
                 Children [
                     // Status Icon Box
-                    (
-                        UNode {
-                            width: UVal::Px(24.0),
-                            height: UVal::Px(24.0),
+                    UNode {
+                        width: UVal::Px(24.0),
+                        height: UVal::Px(24.0),
+                    }
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                    }
+                    Children [
+                        UText {
+                            text: { icon.to_string() },
+                            font_size: 16.0,
+                            font: { icon_font.clone() },
+                            color: icon_color,
                         }
-                        ULayout {
-                            display: UDisplay::Flex,
-                            justify_content: UJustifyContent::Center,
-                            align_items: UAlignItems::Center,
-                        }
-                        Children [
-                            (UText {
-                                text: { icon.to_string() },
-                                font_size: 16.0,
-                                font: { icon_font.clone() },
-                                color: icon_color,
-                            })
-                        ]
-                    ),
+                    ]
+                    --
                     // Message Body (Title & Description)
-                    (
-                        UNode::default()
-                        USelf {
-                            flex_grow: { Some(1.0) },
+                    UNode::default()
+                    USelf {
+                        flex_grow: { Some(1.0) },
+                    }
+                    ULayout {
+                        display: UDisplay::Flex,
+                        flex_direction: UFlexDirection::Column,
+                        gap: 3.0,
+                    }
+                    Children [
+                        UText {
+                            text: title,
+                            font_size: 14.0,
+                            font: { font.clone() },
+                            color: TOAST_TITLE_COLOR,
                         }
-                        ULayout {
-                            display: UDisplay::Flex,
-                            flex_direction: UFlexDirection::Column,
-                            gap: 3.0,
+                        --
+                        UText {
+                            text: description,
+                            font_size: 12.0,
+                            font: { font.clone() },
+                            color: TOAST_DESC_COLOR,
                         }
-                        Children [
-                            (UText {
-                                text: title,
-                                font_size: 14.0,
-                                font: { font.clone() },
-                                color: TOAST_TITLE_COLOR,
-                            }),
-                            (UText {
-                                text: description,
-                                font_size: 12.0,
-                                font: { font.clone() },
-                                color: TOAST_DESC_COLOR,
-                            })
-                        ]
-                    ),
+                    ]
+                    --
                     // Close Button
-                    (
-                        LumaToastClose
-                        UNode {
-                            width: UVal::Px(20.0),
-                            height: UVal::Px(20.0),
-                            border_radius: UCornerRadius::all(4.0),
+                    LumaToastClose
+                    UNode {
+                        width: UVal::Px(20.0),
+                        height: UVal::Px(20.0),
+                        border_radius: UCornerRadius::all(4.0),
+                    }
+                    UInteraction::default()
+                    UInteractionColors {
+                        normal: Color::NONE,
+                        hovered: Color::srgba(1.0, 1.0, 1.0, 0.10),
+                        pressed: Color::srgba(1.0, 1.0, 1.0, 0.20),
+                    }
+                    UFocusable::new()
+                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                    }
+                    Children [
+                        UText {
+                            text: { Icon::X.to_string() },
+                            font_size: 13.0,
+                            font: icon_font,
+                            color: Color::srgb(0.60, 0.65, 0.75),
                         }
-                        UInteraction::default()
-                        UInteractionColors {
-                            normal: Color::NONE,
-                            hovered: Color::srgba(1.0, 1.0, 1.0, 0.10),
-                            pressed: Color::srgba(1.0, 1.0, 1.0, 0.20),
-                        }
-                        UFocusable::new()
-                        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
-                        ULayout {
-                            display: UDisplay::Flex,
-                            justify_content: UJustifyContent::Center,
-                            align_items: UAlignItems::Center,
-                        }
-                        Children [
-                            (UText {
-                                text: { Icon::X.to_string() },
-                                font_size: 13.0,
-                                font: icon_font,
-                                color: Color::srgb(0.60, 0.65, 0.75),
-                            })
-                        ]
-                    )
+                    ]
                 ]
             };
             s.resolve(context, scene)
@@ -432,7 +426,7 @@ fn dismiss_toast(
 }
 
 fn on_toast_close_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     parents_query: Query<&ChildOf>,
     close_query: Query<&LumaToastClose>,
@@ -442,7 +436,7 @@ fn on_toast_close_click(
         return;
     }
     dismiss_toast(
-        trigger.entity.entity(),
+        trigger.entity,
         &mut commands,
         &parents_query,
         &close_query,

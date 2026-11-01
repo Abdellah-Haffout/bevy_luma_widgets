@@ -159,6 +159,9 @@ pub struct Button {
     pub icon_font: Handle<Font>,
     pub style: Option<ButtonStyle>,
     pub disabled: bool,
+    pub loading: bool,
+    pub icon_only: bool,
+    pub fab: bool,
 }
 
 impl Default for Button {
@@ -172,6 +175,9 @@ impl Default for Button {
             icon_font: Handle::default(),
             style: None,
             disabled: false,
+            loading: false,
+            icon_only: false,
+            fab: false,
         }
     }
 }
@@ -250,6 +256,32 @@ impl Button {
         self.disabled = disabled;
         self
     }
+
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
+    }
+
+    pub fn icon_only(mut self, icon: impl Into<String>) -> Self {
+        self.icon = Some(icon.into());
+        self.icon_only = true;
+        self
+    }
+
+    pub fn fab(mut self, icon: impl Into<String>) -> Self {
+        self.icon = Some(icon.into());
+        self.fab = true;
+        self.icon_only = true;
+        self
+    }
+
+    pub fn icon_button(icon: impl Into<String>) -> Self {
+        Self::default().icon_only(icon)
+    }
+
+    pub fn fab_button(icon: impl Into<String>) -> Self {
+        Self::default().fab(icon)
+    }
 }
 
 impl Scene for Button {
@@ -288,10 +320,19 @@ impl Scene for Button {
                 )
             };
 
+        let (radius, padding, min_height, width) = if self.fab {
+            (28.0, USides::all(0.0), 56.0, UVal::Px(56.0))
+        } else if self.icon_only {
+            (radius, USides::all(0.0), min_height, UVal::Px(min_height))
+        } else {
+            (radius, padding, min_height, UVal::Auto)
+        };
+
         let icon_size = self.size.icon_size();
         let icon_text = self.icon.clone().unwrap_or_default();
-        let has_icon = self.icon.is_some();
+        let has_icon = self.icon.is_some() && !self.loading;
         let has_label = !self.label.is_empty();
+        let loading = self.loading;
         let variant = self.variant;
         let size = self.size;
         let disabled = self.disabled;
@@ -306,6 +347,7 @@ impl Scene for Button {
                 disabled,
             }
             UNode {
+                width,
                 min_height,
                 background_color: bg_normal,
                 border_radius: UCornerRadius::all(radius),
@@ -332,34 +374,44 @@ impl Scene for Button {
                 gap: 8.0,
             }
             Children [
-                (
-                    UNode::default()
-                    ULayout {
-                        display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
+                UNode::default()
+                ULayout {
+                    display: { if loading { UDisplay::Flex } else { UDisplay::None } },
+                }
+                Children [
+                    @{
+                        crate::spinner::Spinner::new()
+                            .size(icon_size)
+                            .thickness(2.0)
+                            .color(text_color)
                     }
-                    Children [
-                        (UText {
-                            text: icon_text,
-                            font_size: icon_size,
-                            font: icon_font,
-                            color: text_color,
-                        })
-                    ]
-                ),
-                (
-                    UNode::default()
-                    ULayout {
-                        display: { if has_label { UDisplay::Flex } else { UDisplay::None } },
+                ]
+                --
+                UNode::default()
+                ULayout {
+                    display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
+                }
+                Children [
+                    UText {
+                        text: icon_text,
+                        font_size: icon_size,
+                        font: icon_font,
+                        color: text_color,
                     }
-                    Children [
-                        (UText {
-                            text: label,
-                            font_size,
-                            font,
-                            color: text_color,
-                        })
-                    ]
-                )
+                ]
+                --
+                UNode::default()
+                ULayout {
+                    display: { if has_label { UDisplay::Flex } else { UDisplay::None } },
+                }
+                Children [
+                    UText {
+                        text: label,
+                        font_size,
+                        font,
+                        color: text_color,
+                    }
+                ]
             ]
         };
 
@@ -409,17 +461,24 @@ pub fn luma_icon_button(
 }
 
 fn on_button_pointer_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     query: Query<&LumaButton>,
+    parents_query: Query<&ChildOf>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    let entity = trigger.entity.entity();
-    if let Ok(button) = query.get(entity) {
-        if !button.disabled {
-            commands.trigger(ButtonClicked(entity));
+    let target = if query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
+    };
+    if let Some(entity) = target {
+        if let Ok(button) = query.get(entity) {
+            if !button.disabled {
+                commands.trigger(ButtonClicked(entity));
+            }
         }
     }
 }
@@ -428,11 +487,18 @@ fn on_button_focus_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
     query: Query<&LumaButton>,
+    parents_query: Query<&ChildOf>,
 ) {
-    let entity = trigger.entity;
-    if let Ok(button) = query.get(entity) {
-        if !button.disabled {
-            commands.trigger(ButtonClicked(entity));
+    let target = if query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
+    };
+    if let Some(entity) = target {
+        if let Ok(button) = query.get(entity) {
+            if !button.disabled {
+                commands.trigger(ButtonClicked(entity));
+            }
         }
     }
 }

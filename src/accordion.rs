@@ -125,61 +125,57 @@ impl<C: Scene> Scene for AccordionItem<C> {
             }
             Children [
                 // Accordion Header Bar
-                (
-                    LumaAccordionHeader
-                    UNode {
-                        width: UVal::Percent(1.0),
-                        padding: USides::axes(16.0, 12.0),
-                        background_color: Color::NONE,
+                LumaAccordionHeader
+                UNode {
+                    width: UVal::Percent(1.0),
+                    padding: USides::axes(16.0, 12.0),
+                    background_color: Color::NONE,
+                }
+                UInteraction::default()
+                UInteractionColors {
+                    normal: Color::NONE,
+                    hovered: Color::srgba(1.0, 1.0, 1.0, 0.04),
+                    pressed: Color::srgba(1.0, 1.0, 1.0, 0.08),
+                }
+                UFocusable::new()
+                UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    justify_content: UJustifyContent::SpaceBetween,
+                    align_items: UAlignItems::Center,
+                }
+                Children [
+                    UText {
+                        text: title,
+                        font_size: 14.0,
+                        font,
+                        color: Color::srgb(0.92, 0.95, 0.98),
                     }
-                    UInteraction::default()
-                    UInteractionColors {
-                        normal: Color::NONE,
-                        hovered: Color::srgba(1.0, 1.0, 1.0, 0.04),
-                        pressed: Color::srgba(1.0, 1.0, 1.0, 0.08),
+                    --
+                    LumaAccordionChevron
+                    UText {
+                        text: { chevron_char.to_string() },
+                        font_size: 16.0,
+                        font: icon_font,
+                        color: Color::srgb(0.60, 0.65, 0.75),
                     }
-                    UFocusable::new()
-                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
-                    ULayout {
-                        display: UDisplay::Flex,
-                        flex_direction: UFlexDirection::Row,
-                        justify_content: UJustifyContent::SpaceBetween,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        (UText {
-                            text: title,
-                            font_size: 14.0,
-                            font,
-                            color: Color::srgb(0.92, 0.95, 0.98),
-                        }),
-                        (
-                            LumaAccordionChevron
-                            UText {
-                                text: { chevron_char.to_string() },
-                                font_size: 16.0,
-                                font: icon_font,
-                                color: Color::srgb(0.60, 0.65, 0.75),
-                            }
-                        )
-                    ]
-                ),
+                ]
+                --
                 // Accordion Content Body
-                (
-                    LumaAccordionContent
-                    UNode {
-                        width: UVal::Percent(1.0),
-                        padding: USides::axes(16.0, 12.0),
-                        background_color: Color::srgba(0.06, 0.08, 0.12, 0.5),
-                    }
-                    ULayout {
-                        display: content_display,
-                        flex_direction: UFlexDirection::Column,
-                    }
-                    Children [
-                        content_scene
-                    ]
-                )
+                LumaAccordionContent
+                UNode {
+                    width: UVal::Percent(1.0),
+                    padding: USides::axes(16.0, 12.0),
+                    background_color: Color::srgba(0.06, 0.08, 0.12, 0.5),
+                }
+                ULayout {
+                    display: content_display,
+                    flex_direction: UFlexDirection::Column,
+                }
+                Children [
+                    @{content_scene}
+                ]
             ]
         };
         s.resolve(context, scene)
@@ -249,7 +245,7 @@ fn toggle_accordion(
 }
 
 fn on_accordion_header_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     header_query: Query<&ChildOf, With<LumaAccordionHeader>>,
     item_query: Query<(Entity, &mut LumaAccordionItem, &Children)>,
@@ -258,7 +254,7 @@ fn on_accordion_header_click(
     children_query: Query<&Children>,
 ) {
     toggle_accordion(
-        trigger.entity.entity(),
+        trigger.entity,
         &mut commands,
         header_query,
         item_query,

@@ -96,12 +96,12 @@ impl Scene for Tooltip {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (UText {
+                UText {
                     text,
                     font_size,
                     font,
                     color: Color::srgb(0.92, 0.95, 0.98),
-                })
+                }
             ]
         };
         s.resolve(context, scene)

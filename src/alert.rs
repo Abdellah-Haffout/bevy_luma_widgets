@@ -136,35 +136,35 @@ impl Scene for Alert {
             }
             Children [
                 // Status Icon
-                (UText {
+                UText {
                     text: { icon_char.to_string() },
                     font_size: 20.0,
                     font: icon_font,
                     color: accent_color,
-                }),
+                }
+                --
                 // Text Column (Title + Description)
-                (
-                    UNode::default()
-                    ULayout {
-                        display: UDisplay::Flex,
-                        flex_direction: UFlexDirection::Column,
-                        gap: 4.0,
+                UNode::default()
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Column,
+                    gap: 4.0,
+                }
+                Children [
+                    UText {
+                        text: title,
+                        font_size: 14.0,
+                        font: { font.clone() },
+                        color: Color::WHITE,
                     }
-                    Children [
-                        (UText {
-                            text: title,
-                            font_size: 14.0,
-                            font: { font.clone() },
-                            color: Color::WHITE,
-                        }),
-                        (UText {
-                            text: description,
-                            font_size: 13.0,
-                            font,
-                            color: Color::srgb(0.75, 0.80, 0.88),
-                        })
-                    ]
-                )
+                    --
+                    UText {
+                        text: description,
+                        font_size: 13.0,
+                        font,
+                        color: Color::srgb(0.75, 0.80, 0.88),
+                    }
+                ]
             ]
         };
         s.resolve(context, scene)

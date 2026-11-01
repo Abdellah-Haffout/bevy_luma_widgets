@@ -156,108 +156,99 @@ impl Scene for StatCard {
             }
             Children [
                 // Header: Title & Optional Icon
-                (
-                    UNode::default()
+                UNode::default()
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    justify_content: UJustifyContent::SpaceBetween,
+                }
+                Children [
+                    UText {
+                        text: title,
+                        font_size: 13.0,
+                        font: { font.clone() },
+                        color: STAT_TITLE_COLOR,
+                    }
+                    --
+                    UNode {
+                        width: UVal::Px(28.0),
+                        height: UVal::Px(28.0),
+                        background_color: Color::srgba(0.20, 0.45, 0.90, 0.15),
+                        border_radius: UCornerRadius::all(6.0),
+                    }
                     ULayout {
-                        display: UDisplay::Flex,
+                        display: { if has_header_icon { UDisplay::Flex } else { UDisplay::None } },
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                    }
+                    Children [
+                        UText {
+                            text: header_icon,
+                            font_size: 14.0,
+                            font: { icon_font.clone() },
+                            color: Color::srgb(0.40, 0.65, 1.00),
+                        }
+                    ]
+                ]
+                --
+                // Value & Optional Trend Pill
+                UNode::default()
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Baseline,
+                    justify_content: UJustifyContent::SpaceBetween,
+                }
+                Children [
+                    UText {
+                        text: value,
+                        font_size: 26.0,
+                        font: { font.clone() },
+                        color: STAT_VALUE_COLOR,
+                    }
+                    --
+                    UNode {
+                        background_color: trend_bg,
+                        border_radius: UCornerRadius::all(6.0),
+                        padding: USides::axes(6.0, 3.0),
+                    }
+                    ULayout {
+                        display: { if has_trend { UDisplay::Flex } else { UDisplay::None } },
                         flex_direction: UFlexDirection::Row,
                         align_items: UAlignItems::Center,
-                        justify_content: UJustifyContent::SpaceBetween,
+                        gap: 3.0,
                     }
                     Children [
-                        (UText {
-                            text: title,
-                            font_size: 13.0,
+                        UText {
+                            text: { if has_trend_icon { trend_icon.to_string() } else { String::new() } },
+                            font_size: 11.0,
+                            font: { icon_font.clone() },
+                            color: trend_color,
+                        }
+                        --
+                        UText {
+                            text: trend_text,
+                            font_size: 11.0,
                             font: { font.clone() },
-                            color: STAT_TITLE_COLOR,
-                        }),
-                        (
-                            UNode {
-                                width: UVal::Px(28.0),
-                                height: UVal::Px(28.0),
-                                background_color: Color::srgba(0.20, 0.45, 0.90, 0.15),
-                                border_radius: UCornerRadius::all(6.0),
-                            }
-                            ULayout {
-                                display: { if has_header_icon { UDisplay::Flex } else { UDisplay::None } },
-                                justify_content: UJustifyContent::Center,
-                                align_items: UAlignItems::Center,
-                            }
-                            Children [
-                                (UText {
-                                    text: header_icon,
-                                    font_size: 14.0,
-                                    font: { icon_font.clone() },
-                                    color: Color::srgb(0.40, 0.65, 1.00),
-                                })
-                            ]
-                        )
+                            color: trend_color,
+                        }
                     ]
-                ),
-                // Value & Optional Trend Pill
-                (
-                    UNode::default()
-                    ULayout {
-                        display: UDisplay::Flex,
-                        flex_direction: UFlexDirection::Row,
-                        align_items: UAlignItems::Baseline,
-                        justify_content: UJustifyContent::SpaceBetween,
-                    }
-                    Children [
-                        (UText {
-                            text: value,
-                            font_size: 26.0,
-                            font: { font.clone() },
-                            color: STAT_VALUE_COLOR,
-                        }),
-                        (
-                            UNode {
-                                background_color: trend_bg,
-                                border_radius: UCornerRadius::all(6.0),
-                                padding: USides::axes(6.0, 3.0),
-                            }
-                            ULayout {
-                                display: { if has_trend { UDisplay::Flex } else { UDisplay::None } },
-                                flex_direction: UFlexDirection::Row,
-                                align_items: UAlignItems::Center,
-                                gap: 3.0,
-                            }
-                            Children [
-                                (
-                                    UText {
-                                        text: { if has_trend_icon { trend_icon.to_string() } else { String::new() } },
-                                        font_size: 11.0,
-                                        font: { icon_font.clone() },
-                                        color: trend_color,
-                                    }
-                                ),
-                                (
-                                    UText {
-                                        text: trend_text,
-                                        font_size: 11.0,
-                                        font: { font.clone() },
-                                        color: trend_color,
-                                    }
-                                )
-                            ]
-                        )
-                    ]
-                ),
+                ]
+                --
                 // Optional Footer Description
-                (
-                    UNode::default()
-                    ULayout {
-                        display: { if has_desc { UDisplay::Flex } else { UDisplay::None } },
+                UNode::default()
+                ULayout {
+                    display: { if has_desc { UDisplay::Flex } else { UDisplay::None } },
+                }
+                Children [
+                    UText {
+                        text: desc_text,
+                        font_size: 12.0,
+                        font,
+                        color: Color::srgb(0.45, 0.50, 0.60),
                     }
-                    Children [
-                        (UText {
-                            text: desc_text,
-                            font_size: 12.0,
-                            font,
-                            color: Color::srgb(0.45, 0.50, 0.60),
-                        })
-                    ]
-                )
+                ]
             ]
         };
 

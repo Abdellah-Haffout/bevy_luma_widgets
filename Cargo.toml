@@ -10,6 +10,7 @@ repository = "https://github.com/Abdellah-Haffout/bevy_luma_widgets"
 homepage = "https://github.com/Abdellah-Haffout/bevy_luma_widgets"
 keywords = ["bevy", "ui", "widgets", "components", "gui"]
 categories = ["game-development", "gui"]
+autoexamples = true
 include = [
     "/Cargo.toml",
     "/LICENSE-MIT",
@@ -20,7 +21,7 @@ include = [
 ]
 
 [dependencies]
-bevy = { version = "0.19.0", default-features = false, features = [
+bevy = { version = "0.20.0", default-features = false, features = [
     "default_app",
     "std",
     "android-native-activity",
@@ -57,3 +58,11 @@ path = "examples/widgets_gallery.rs"
 [[example]]
 name = "settings_dialog"
 path = "examples/settings_dialog.rs"
+
+[[example]]
+name = "roots_and_styles"
+path = "examples/roots_and_styles.rs"
+
+[[example]]
+name = "all_widgets"
+path = "examples/all_widgets.rs"

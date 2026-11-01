@@ -122,63 +122,59 @@ impl Scene for Chip {
                 gap: 5.0,
             }
             Children [
-                (
-                    UNode::default()
-                    ULayout {
-                        display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
+                UNode::default()
+                ULayout {
+                    display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
+                }
+                Children [
+                    UText {
+                        text: icon_str,
+                        font_size: 13.0,
+                        font: { icon_font.clone() },
+                        color: Color::srgb(0.45, 0.70, 1.00),
                     }
-                    Children [
-                        (UText {
-                            text: icon_str,
-                            font_size: 13.0,
-                            font: { icon_font.clone() },
-                            color: Color::srgb(0.45, 0.70, 1.00),
-                        })
-                    ]
-                ),
-                (UText {
+                ]
+                --
+                UText {
                     text: label,
                     font_size: 12.0,
                     font,
                     color: CHIP_TEXT,
-                }),
-                (
-                    UNode::default()
+                }
+                --
+                UNode::default()
+                ULayout {
+                    display: { if removable { UDisplay::Flex } else { UDisplay::None } },
+                }
+                Children [
+                    LumaChipDismiss
+                    UNode {
+                        width: UVal::Px(16.0),
+                        height: UVal::Px(16.0),
+                        border_radius: UCornerRadius::all(8.0),
+                    }
+                    UInteraction::default()
+                    UInteractionColors {
+                        normal: Color::NONE,
+                        hovered: DISMISS_HOVER,
+                        pressed: DISMISS_PRESSED,
+                    }
+                    UFocusable::new()
+                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
                     ULayout {
-                        display: { if removable { UDisplay::Flex } else { UDisplay::None } },
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
                     }
                     Children [
-                        (
-                            LumaChipDismiss
-                            UNode {
-                                width: UVal::Px(16.0),
-                                height: UVal::Px(16.0),
-                                border_radius: UCornerRadius::all(8.0),
-                            }
-                            UInteraction::default()
-                            UInteractionColors {
-                                normal: Color::NONE,
-                                hovered: DISMISS_HOVER,
-                                pressed: DISMISS_PRESSED,
-                            }
-                            UFocusable::new()
-                            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
-                            ULayout {
-                                display: UDisplay::Flex,
-                                justify_content: UJustifyContent::Center,
-                                align_items: UAlignItems::Center,
-                            }
-                            Children [
-                                (UText {
-                                    text: { Icon::X.to_string() },
-                                    font_size: 11.0,
-                                    font: icon_font,
-                                    color: Color::srgb(0.65, 0.70, 0.80),
-                                })
-                            ]
-                        )
+                        UText {
+                            text: { Icon::X.to_string() },
+                            font_size: 11.0,
+                            font: icon_font,
+                            color: Color::srgb(0.65, 0.70, 0.80),
+                        }
                     ]
-                )
+                ]
             ]
         };
 
@@ -260,7 +256,7 @@ fn dismiss_chip(
 }
 
 fn on_chip_dismiss_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     parents_query: Query<&ChildOf>,
     dismiss_query: Query<&LumaChipDismiss>,
@@ -270,7 +266,7 @@ fn on_chip_dismiss_click(
         return;
     }
     dismiss_chip(
-        trigger.entity.entity(),
+        trigger.entity,
         &mut commands,
         &parents_query,
         &dismiss_query,

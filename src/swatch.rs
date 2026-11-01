@@ -89,7 +89,7 @@ impl Scene for Swatch {
         } else {
             SWATCH_UNSELECTED_BORDER
         };
-        let border_width = if self.selected { 2.5 } else { 1.5 };
+        let border_width = if self.selected { 2.5_f32 } else { 1.5_f32 };
         let color = self.color;
         let selected = self.selected;
         let font = self.font;
@@ -125,13 +125,14 @@ impl Scene for Swatch {
                     gap: 10.0,
                 }
                 Children [
-                    tile,
-                    (UText {
+                    @{tile}
+                    --
+                    UText {
                         text: label_str,
                         font_size: 13.0,
                         font,
                         color: Color::srgb(0.85, 0.88, 0.95),
-                    })
+                    }
                 ]
             };
             container.resolve(context, scene)
@@ -179,14 +180,14 @@ fn toggle_swatch(
 }
 
 fn on_swatch_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     query: Query<(Entity, &mut LumaSwatch, &mut UBorder)>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    toggle_swatch(trigger.entity.entity(), &mut commands, query);
+    toggle_swatch(trigger.entity, &mut commands, query);
 }
 
 fn on_swatch_activate(

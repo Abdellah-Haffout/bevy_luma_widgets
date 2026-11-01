@@ -29,6 +29,11 @@
 //! - Toasts (contextual alert toasts with auto-dismiss timers)
 //! - Color Swatches (palette previews and color pickers)
 
+pub mod cards;
+pub mod controls;
+pub mod data_views;
+pub mod navigation;
+pub mod states;
 pub mod accordion;
 pub mod alert;
 pub mod avatar;
@@ -39,15 +44,21 @@ pub mod card;
 pub mod checkbox;
 pub mod chip;
 pub mod divider;
+pub mod drag_value;
+pub mod drawer;
 pub mod input;
 pub mod kbd;
+pub mod list_item;
 pub mod modal;
+pub mod popover;
 pub mod progress;
 pub mod radio;
 pub mod rating;
 pub mod segmented_control;
+pub mod select;
 pub mod skeleton;
 pub mod slider;
+pub mod spinner;
 pub mod stat;
 pub mod stepper;
 pub mod swatch;
@@ -65,10 +76,12 @@ pub mod prelude {
     pub use bevy_luma::prelude::*;
 
     pub use crate::{
-        accordion::*, alert::*, avatar::*, badge::*, breadcrumb::*, button::*, card::*,
-        checkbox::*, chip::*, divider::*, input::*, kbd::*, modal::*, progress::*, radio::*,
-        rating::*, segmented_control::*, skeleton::*, slider::*, stat::*, stepper::*, swatch::*,
-        tabs::*, theme::*, toast::*, toggle::*, tooltip::*, LumaWidgetsPlugin,
+        accordion::*, alert::*, avatar::*, badge::*, breadcrumb::*, button::*, card::*, cards::*,
+        checkbox::*, chip::*, controls::*, data_views::*, divider::*, drag_value::*, drawer::*,
+        input::*, kbd::*, list_item::*, modal::*, navigation::*, popover::*, progress::*, radio::*,
+        rating::*, segmented_control::*, select::*, skeleton::*, slider::*, spinner::*, stat::*,
+        states::*, stepper::*, swatch::*, tabs::*, theme::*, toast::*, toggle::*, tooltip::*,
+        LumaWidgetsPlugin,
     };
 }
 
@@ -103,6 +116,14 @@ impl Plugin for LumaWidgetsPlugin {
                 chip::LumaChipPlugin,
                 toast::LumaToastPlugin,
                 swatch::LumaSwatchPlugin,
+            ))
+            .add_plugins((
+                spinner::LumaSpinnerPlugin,
+                list_item::LumaListItemPlugin,
+                select::LumaSelectPlugin,
+                drawer::LumaDrawerPlugin,
+                popover::LumaPopoverPlugin,
+                drag_value::LumaDragValuePlugin,
             ));
     }
 }
@@ -371,7 +392,7 @@ mod tests {
     fn test_mouse_clicks_on_widgets() {
         use bevy::camera::NormalizedRenderTarget;
         use bevy::picking::backend::HitData;
-        use bevy::picking::events::{Click, Pointer, Press};
+        use bevy::picking::events::{Pointer, PointerClick, PointerPress};
         use bevy::picking::pointer::{Location, PointerButton, PointerId};
         use core::time::Duration;
 
@@ -396,30 +417,24 @@ mod tests {
         let hit = HitData::new(Entity::PLACEHOLDER, 0.0, None, None);
 
         let trigger_click = |app: &mut App, entity: Entity, button: PointerButton| {
-            app.world_mut().trigger(Pointer::new(
-                PointerId::Mouse,
-                location.clone(),
-                Click {
-                    button,
-                    hit: hit.clone(),
-                    duration: Duration::ZERO,
-                    count: 1,
-                },
+            app.world_mut().trigger(PointerClick {
                 entity,
-            ));
+                pointer: Pointer::new(PointerId::Mouse, location.clone()),
+                button,
+                hit: hit.clone(),
+                duration: Duration::ZERO,
+                count: 1,
+            });
         };
 
         let trigger_press = |app: &mut App, entity: Entity, button: PointerButton| {
-            app.world_mut().trigger(Pointer::new(
-                PointerId::Mouse,
-                location.clone(),
-                Press {
-                    button,
-                    hit: hit.clone(),
-                    count: 1,
-                },
+            app.world_mut().trigger(PointerPress {
                 entity,
-            ));
+                pointer: Pointer::new(PointerId::Mouse, location.clone()),
+                button,
+                hit: hit.clone(),
+                count: 1,
+            });
         };
 
         for entity in [btn, toggle, checkbox, stepper, chip, toast, swatch, radio] {
@@ -434,5 +449,220 @@ mod tests {
             app.update();
         }
     }
+
+    #[test]
+    fn spinner_declarative_builder() {
+        let spinner = Spinner::new().size(32.0).speed(8.0).thickness(4.0);
+        assert_eq!(spinner.size, 32.0);
+        assert_eq!(spinner.speed, 8.0);
+        assert_eq!(spinner.thickness, 4.0);
+
+        let sm = Spinner::sm();
+        assert_eq!(sm.style.unwrap().size, 16.0);
+    }
+
+    #[test]
+    fn text_input_presets() {
+        let search = TextInput::search("Search query");
+        assert!(search.leading_icon.is_some());
+        assert_eq!(search.placeholder, "Search query");
+
+        let pwd = TextInput::password("Pass");
+        assert_eq!(pwd.mode, TextInputMode::Password);
+        assert!(pwd.trailing_icon.is_some());
+
+        let otp = TextInput::otp();
+        assert_eq!(otp.style.unwrap().min_height, 48.0);
+
+        let multiline = TextInput::multiline("Notes");
+        assert_eq!(multiline.style.unwrap().min_height, 90.0);
+    }
+
+    #[test]
+    fn button_fab_and_loading() {
+        let fab = Button::fab_button("plus");
+        assert!(fab.fab);
+        assert!(fab.icon_only);
+
+        let loading = Button::new("Submit").loading(true);
+        assert!(loading.loading);
+    }
+
+    #[test]
+    fn badge_counter_formatting() {
+        let c5 = Badge::counter(5);
+        assert_eq!(c5.label, "5");
+
+        let c150 = Badge::counter(150);
+        assert_eq!(c150.label, "99+");
+    }
+
+    #[test]
+    fn list_item_declarative_builder() {
+        let item = ListItem::new("Title")
+            .subtitle("Subtitle")
+            .leading_icon("star")
+            .trailing_text("Active");
+
+        assert_eq!(item.title, "Title");
+        assert_eq!(item.subtitle, Some("Subtitle".to_string()));
+        assert_eq!(item.leading_icon, Some("star".to_string()));
+        assert_eq!(item.trailing_text, Some("Active".to_string()));
+    }
+
+    #[test]
+    fn select_declarative_builder() {
+        let options = vec![
+            SelectOption::new("Option A", "a"),
+            SelectOption::new("Option B", "b"),
+        ];
+        let select = Select::new("Choose", options).selected(1);
+
+        assert_eq!(select.placeholder, "Choose");
+        assert_eq!(select.options.len(), 2);
+        assert_eq!(select.selected_index, Some(1));
+    }
+
+    #[test]
+    fn drawer_and_popover_builders() {
+        let drawer = Drawer::left().title("Sidebar Menu");
+        assert_eq!(drawer.placement, DrawerPlacement::Left);
+        assert_eq!(drawer.title, Some("Sidebar Menu".to_string()));
+
+        let popover = Popover::new().open(true);
+        assert!(popover.is_open);
+    }
+
+    #[test]
+    fn card_style_presets() {
+        let elevated = CardStyle::elevated();
+        assert_eq!(elevated.radius, 12.0);
+
+        let outlined = CardStyle::outlined();
+        assert_eq!(outlined.bg_color, Color::NONE);
+        assert_eq!(outlined.border_width, 1.5);
+
+        let flat = CardStyle::flat();
+        assert_eq!(flat.border_width, 0.0);
+    }
+
+    #[test]
+    fn test_all_100_widgets_instantiation() {
+        let mut app = test_app();
+
+        // 1. Input & Controls (30 widgets)
+        let _ = app.world_mut().spawn_scene(Button::new("Btn")).unwrap();
+        let _ = app.world_mut().spawn_scene(IconButton::new(Icon::PLUS)).unwrap();
+        let _ = app.world_mut().spawn_scene(Fab::new(Icon::PLUS)).unwrap();
+        let _ = app.world_mut().spawn_scene(SegmentedControl::new("g1", "O1")).unwrap();
+        let _ = app.world_mut().spawn_scene(Toggle::new(true)).unwrap();
+        let _ = app.world_mut().spawn_scene(Checkbox::new("Check", true)).unwrap();
+        let _ = app.world_mut().spawn_scene(Radio::new("g1", "v1")).unwrap();
+        let _ = app.world_mut().spawn_scene(TextInput::new("Input placeholder")).unwrap();
+        let _ = app.world_mut().spawn_scene(PasswordInput::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(SearchBar::new("Search...")).unwrap();
+        let _ = app.world_mut().spawn_scene(TextArea::new("Type notes...")).unwrap();
+        let _ = app.world_mut().spawn_scene(Stepper::new(1.0, 0.0, 10.0, 1.0)).unwrap();
+        let _ = app.world_mut().spawn_scene(Select::new("Sel", vec![SelectOption::new("A", "a")])).unwrap();
+        let _ = app.world_mut().spawn_scene(MultiSelect::new("Multi")).unwrap();
+        let _ = app.world_mut().spawn_scene(Combobox::new("Combo")).unwrap();
+        let _ = app.world_mut().spawn_scene(Slider::new(5.0, 0.0, 10.0, 100.0)).unwrap();
+        let _ = app.world_mut().spawn_scene(RangeSlider::new(20.0, 80.0, 0.0, 100.0)).unwrap();
+        let _ = app.world_mut().spawn_scene(DatePicker::new("2026-10-16")).unwrap();
+        let _ = app.world_mut().spawn_scene(DateRangePicker::new("2026-10-01", "2026-10-16")).unwrap();
+        let _ = app.world_mut().spawn_scene(TimePicker::new("12:00 PM")).unwrap();
+        let _ = app.world_mut().spawn_scene(ColorPicker::new(Color::srgb(0.2, 0.5, 0.9), "#3388EE")).unwrap();
+        let _ = app.world_mut().spawn_scene(FileUploader::new("Drop files here")).unwrap();
+        let _ = app.world_mut().spawn_scene(OtpInput::new(6)).unwrap();
+        let _ = app.world_mut().spawn_scene(PhoneInput::new("+1")).unwrap();
+        let _ = app.world_mut().spawn_scene(Rating::new(5)).unwrap();
+        let _ = app.world_mut().spawn_scene(ReactionPicker::default()).unwrap();
+        let _ = app.world_mut().spawn_scene(RichTextToolbar::default()).unwrap();
+        let _ = app.world_mut().spawn_scene(TagInput::new("Add tags...")).unwrap();
+        let _ = app.world_mut().spawn_scene(CreditCardInput::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(VoiceInputButton::new()).unwrap();
+
+        // 2. Navigation & Structure (25 widgets)
+        let _ = app.world_mut().spawn_scene(Navbar::new("App")).unwrap();
+        let _ = app.world_mut().spawn_scene(BottomNav::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(Sidebar::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(BreadcrumbItem::new("home", "Home")).unwrap();
+        let _ = app.world_mut().spawn_scene(Breadcrumbs::new(vec!["Home"])).unwrap();
+        let _ = app.world_mut().spawn_scene(TabTrigger::new("group", "tab1", "Tab 1")).unwrap();
+        let _ = app.world_mut().spawn_scene(Pagination::new(1, 10)).unwrap();
+        let _ = app.world_mut().spawn_scene(StepTracker::new(vec!["Cart"])).unwrap();
+        let _ = app.world_mut().spawn_scene(HamburgerMenu::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(MegaMenu::new("Solutions")).unwrap();
+        let _ = app.world_mut().spawn_scene(Footer::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(ContextMenu::new(vec!["Copy"])).unwrap();
+        let _ = app.world_mut().spawn_scene(CommandPalette::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(CustomScrollbar::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(BackToTopButton::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(ActionSheet::new("Actions")).unwrap();
+        let _ = app.world_mut().spawn_scene(BottomSheet::new("Sheet")).unwrap();
+        let _ = app.world_mut().spawn_scene(Splitter::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(TreeView::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(CarouselControls::new(0, 5)).unwrap();
+        let _ = app.world_mut().spawn_scene(TableOfContents::new(vec!["Intro"])).unwrap();
+        let _ = app.world_mut().spawn_scene(FilterSortBar::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(FloatingToolbar::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(WorkspaceSwitcher::new("Main")).unwrap();
+        let _ = app.world_mut().spawn_scene(LocaleSelector::new("EN")).unwrap();
+        let _ = app.world_mut().spawn_scene(ThemeToggle::new()).unwrap();
+
+        // 3. Data Display & Content (25 widgets)
+        let _ = app.world_mut().spawn_scene(Card::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(ProductCard::new("Item", "$99")).unwrap();
+        let _ = app.world_mut().spawn_scene(UserProfileCard::new("Alice", "@alice")).unwrap();
+        let _ = app.world_mut().spawn_scene(PricingCard::new("Pro", "$29")).unwrap();
+        let _ = app.world_mut().spawn_scene(ArticleCard::new("Title", "Excerpt...")).unwrap();
+        let _ = app.world_mut().spawn_scene(TestimonialCard::new("Great!", "Bob")).unwrap();
+        let _ = app.world_mut().spawn_scene(StatCard::new("Users", "12,450")).unwrap();
+        let _ = app.world_mut().spawn_scene(AccordionItem::new("Q1")).unwrap();
+        let _ = app.world_mut().spawn_scene(Avatar::new("AB")).unwrap();
+        let _ = app.world_mut().spawn_scene(AvatarGroup::new(vec!["A".to_string(), "B".to_string()])).unwrap();
+        let _ = app.world_mut().spawn_scene(Badge::new("Active")).unwrap();
+        let _ = app.world_mut().spawn_scene(NotificationCounter::new(5)).unwrap();
+        let _ = app.world_mut().spawn_scene(Chip::new("Rust")).unwrap();
+        let _ = app.world_mut().spawn_scene(ListItem::new("List Title")).unwrap();
+        let _ = app.world_mut().spawn_scene(Divider::horizontal()).unwrap();
+        let _ = app.world_mut().spawn_scene(DataTable::new(vec!["Col1".to_string()], vec![vec!["Val1".to_string()]])).unwrap();
+        let _ = app.world_mut().spawn_scene(Timeline::new(vec![("10:00", "Deployed", "v1.0")])).unwrap();
+        let _ = app.world_mut().spawn_scene(CommentThread::new("User", "Nice work!")).unwrap();
+        let _ = app.world_mut().spawn_scene(ChatBubble::new("Hello!")).unwrap();
+        let _ = app.world_mut().spawn_scene(MediaPlayer::new("Track", "Artist")).unwrap();
+        let _ = app.world_mut().spawn_scene(ImageLightbox::new("Nature")).unwrap();
+        let _ = app.world_mut().spawn_scene(BarChart::new(vec![("Jan", 10.0)])).unwrap();
+        let _ = app.world_mut().spawn_scene(DonutChart::new(0.75, "75% Done")).unwrap();
+        let _ = app.world_mut().spawn_scene(SocialFeedPost::new("Author", "@auth")).unwrap();
+        let _ = app.world_mut().spawn_scene(CodeBlock::new("fn main() {}")).unwrap();
+
+        // 4. Feedback, Overlays & States (22 widgets)
+        let _ = app.world_mut().spawn_scene(Modal::new("Modal Title", "Description")).unwrap();
+        let _ = app.world_mut().spawn_scene(Alert::new("System Alert", "Notice details")).unwrap();
+        let _ = app.world_mut().spawn_scene(Toast::new("Saved", "File saved")).unwrap();
+        let _ = app.world_mut().spawn_scene(Tooltip::new("Help text")).unwrap();
+        let _ = app.world_mut().spawn_scene(Popover::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(ProgressBar::new(0.5)).unwrap();
+        let _ = app.world_mut().spawn_scene(Spinner::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(Skeleton::new(UVal::Px(100.0), UVal::Px(20.0))).unwrap();
+        let _ = app.world_mut().spawn_scene(Kbd::new("Ctrl")).unwrap();
+        let _ = app.world_mut().spawn_scene(Drawer::right()).unwrap();
+        let _ = app.world_mut().spawn_scene(EmptyState::new("No Data", "Nothing here yet")).unwrap();
+        let _ = app.world_mut().spawn_scene(Error404State::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(OfflineState::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(SuccessScreen::new("Payment Complete", "$49.99")).unwrap();
+        let _ = app.world_mut().spawn_scene(Coachmark::new("Feature", "Check this new feature out")).unwrap();
+        let _ = app.world_mut().spawn_scene(CookieConsent::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(Paywall::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(NotificationCenter::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(CartDrawer::new()).unwrap();
+        let _ = app.world_mut().spawn_scene(KanbanColumn::new("To Do", 2)).unwrap();
+        let _ = app.world_mut().spawn_scene(KanbanCard::new("Task 1", "Bug")).unwrap();
+        let _ = app.world_mut().spawn_scene(CalendarSchedule::new("Monday")).unwrap();
+
+        app.update();
+    }
 }
+
 

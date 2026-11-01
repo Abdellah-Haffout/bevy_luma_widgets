@@ -113,6 +113,15 @@ impl Badge {
         Self::new(label).variant(BadgeVariant::Neutral)
     }
 
+    pub fn counter(count: usize) -> Self {
+        let label = if count > 99 {
+            "99+".to_string()
+        } else {
+            count.to_string()
+        };
+        Self::new(label).style(BadgeStyle::counter())
+    }
+
     pub fn icon(mut self, icon: impl Into<String>) -> Self {
         self.icon = Some(icon.into());
         self
@@ -174,26 +183,25 @@ impl Scene for Badge {
                 gap: 4.0,
             }
             Children [
-                (
-                    UNode::default()
-                    ULayout {
-                        display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
+                UNode::default()
+                ULayout {
+                    display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
+                }
+                Children [
+                    UText {
+                        text: icon_str,
+                        font_size: 12.0,
+                        font: icon_font,
+                        color: text_color,
                     }
-                    Children [
-                        (UText {
-                            text: icon_str,
-                            font_size: 12.0,
-                            font: icon_font,
-                            color: text_color,
-                        })
-                    ]
-                ),
-                (UText {
+                ]
+                --
+                UText {
                     text: label,
                     font_size,
                     font,
                     color: text_color,
-                })
+                }
             ]
         };
 

@@ -155,87 +155,83 @@ impl Scene for Stepper {
             }
             Children [
                 // Decrement Button [-]
-                (
-                    LumaStepperButton { is_increment: false }
-                    UNode {
-                        width: UVal::Px(28.0),
-                        height: UVal::Px(26.0),
-                        background_color: BTN_BG_NORMAL,
-                        border_radius: UCornerRadius::all(6.0),
+                LumaStepperButton { is_increment: false }
+                UNode {
+                    width: UVal::Px(28.0),
+                    height: UVal::Px(26.0),
+                    background_color: BTN_BG_NORMAL,
+                    border_radius: UCornerRadius::all(6.0),
+                }
+                UInteraction::default()
+                UInteractionColors {
+                    normal: BTN_BG_NORMAL,
+                    hovered: BTN_BG_HOVER,
+                    pressed: BTN_BG_PRESSED,
+                }
+                UFocusable::new()
+                UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
+                ULayout {
+                    display: UDisplay::Flex,
+                    justify_content: UJustifyContent::Center,
+                    align_items: UAlignItems::Center,
+                }
+                Children [
+                    UText {
+                        text: { Icon::MINUS.to_string() },
+                        font_size: 13.0,
+                        font: { icon_font.clone() },
+                        color: Color::srgb(0.80, 0.85, 0.95),
                     }
-                    UInteraction::default()
-                    UInteractionColors {
-                        normal: BTN_BG_NORMAL,
-                        hovered: BTN_BG_HOVER,
-                        pressed: BTN_BG_PRESSED,
-                    }
-                    UFocusable::new()
-                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        (UText {
-                            text: { Icon::MINUS.to_string() },
-                            font_size: 13.0,
-                            font: { icon_font.clone() },
-                            color: Color::srgb(0.80, 0.85, 0.95),
-                        })
-                    ]
-                ),
+                ]
+                --
                 // Value Text Display
-                (
-                    LumaStepperValueText
-                    UNode {
-                        min_width: 48.0,
+                LumaStepperValueText
+                UNode {
+                    min_width: 48.0,
+                }
+                ULayout {
+                    display: UDisplay::Flex,
+                    justify_content: UJustifyContent::Center,
+                    align_items: UAlignItems::Center,
+                }
+                Children [
+                    UText {
+                        text: display_str,
+                        font_size: 14.0,
+                        font,
+                        color: Color::srgb(0.95, 0.96, 0.98),
                     }
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        (UText {
-                            text: display_str,
-                            font_size: 14.0,
-                            font,
-                            color: Color::srgb(0.95, 0.96, 0.98),
-                        })
-                    ]
-                ),
+                ]
+                --
                 // Increment Button [+]
-                (
-                    LumaStepperButton { is_increment: true }
-                    UNode {
-                        width: UVal::Px(28.0),
-                        height: UVal::Px(26.0),
-                        background_color: BTN_BG_NORMAL,
-                        border_radius: UCornerRadius::all(6.0),
+                LumaStepperButton { is_increment: true }
+                UNode {
+                    width: UVal::Px(28.0),
+                    height: UVal::Px(26.0),
+                    background_color: BTN_BG_NORMAL,
+                    border_radius: UCornerRadius::all(6.0),
+                }
+                UInteraction::default()
+                UInteractionColors {
+                    normal: BTN_BG_NORMAL,
+                    hovered: BTN_BG_HOVER,
+                    pressed: BTN_BG_PRESSED,
+                }
+                UFocusable::new()
+                UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
+                ULayout {
+                    display: UDisplay::Flex,
+                    justify_content: UJustifyContent::Center,
+                    align_items: UAlignItems::Center,
+                }
+                Children [
+                    UText {
+                        text: { Icon::PLUS.to_string() },
+                        font_size: 13.0,
+                        font: icon_font,
+                        color: Color::srgb(0.80, 0.85, 0.95),
                     }
-                    UInteraction::default()
-                    UInteractionColors {
-                        normal: BTN_BG_NORMAL,
-                        hovered: BTN_BG_HOVER,
-                        pressed: BTN_BG_PRESSED,
-                    }
-                    UFocusable::new()
-                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        (UText {
-                            text: { Icon::PLUS.to_string() },
-                            font_size: 13.0,
-                            font: icon_font,
-                            color: Color::srgb(0.80, 0.85, 0.95),
-                        })
-                    ]
-                )
+                ]
             ]
         };
 
@@ -325,7 +321,7 @@ fn step_stepper(
 }
 
 fn on_stepper_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     parents_query: Query<&ChildOf>,
     button_query: Query<&LumaStepperButton>,
@@ -337,7 +333,7 @@ fn on_stepper_click(
         return;
     }
     step_stepper(
-        trigger.entity.entity(),
+        trigger.entity,
         &mut commands,
         &parents_query,
         &button_query,

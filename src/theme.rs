@@ -183,6 +183,50 @@ impl ButtonStyle {
             font_size: 14.0,
         }
     }
+
+    pub fn fab() -> Self {
+        Self {
+            bg_normal: Color::srgb(0.20, 0.45, 0.90),
+            bg_hover: Color::srgb(0.28, 0.55, 1.00),
+            bg_pressed: Color::srgb(0.14, 0.35, 0.75),
+            border_color: Color::srgb(0.35, 0.60, 1.00),
+            border_width: 1.5,
+            text_color: Color::WHITE,
+            radius: 28.0,
+            padding: USides::all(0.0),
+            min_height: 56.0,
+            font_size: 20.0,
+        }
+    }
+
+    pub fn icon() -> Self {
+        Self {
+            bg_normal: Color::srgb(0.18, 0.20, 0.27),
+            bg_hover: Color::srgb(0.24, 0.27, 0.36),
+            bg_pressed: Color::srgb(0.13, 0.15, 0.20),
+            border_color: Color::srgb(0.25, 0.28, 0.38),
+            border_width: 1.0,
+            text_color: Color::srgb(0.95, 0.96, 0.98),
+            radius: 8.0,
+            padding: USides::all(0.0),
+            min_height: 38.0,
+            font_size: 16.0,
+        }
+    }
+
+    pub fn icon_circle() -> Self {
+        Self {
+            radius: 19.0,
+            ..Self::icon()
+        }
+    }
+
+    pub fn pill() -> Self {
+        Self {
+            radius: 999.0,
+            ..Self::primary()
+        }
+    }
 }
 
 /// Customizable style definition for a Toggle Switch widget.
@@ -237,6 +281,42 @@ impl Default for CardStyle {
     }
 }
 
+impl CardStyle {
+    pub fn elevated() -> Self {
+        Self::default()
+    }
+
+    pub fn outlined() -> Self {
+        Self {
+            bg_color: Color::NONE,
+            border_color: Color::srgb(0.24, 0.28, 0.38),
+            border_width: 1.5,
+            radius: 12.0,
+            padding: 16.0,
+        }
+    }
+
+    pub fn flat() -> Self {
+        Self {
+            bg_color: Color::srgb(0.09, 0.10, 0.14),
+            border_color: Color::NONE,
+            border_width: 0.0,
+            radius: 8.0,
+            padding: 14.0,
+        }
+    }
+
+    pub fn interactive() -> Self {
+        Self {
+            bg_color: Color::srgb(0.12, 0.14, 0.20),
+            border_color: Color::srgb(0.28, 0.45, 0.85),
+            border_width: 1.0,
+            radius: 12.0,
+            padding: 16.0,
+        }
+    }
+}
+
 /// Customizable style definition for a Badge widget.
 #[derive(Clone, Debug, Reflect)]
 pub struct BadgeStyle {
@@ -255,6 +335,17 @@ impl Default for BadgeStyle {
 }
 
 impl BadgeStyle {
+    pub fn counter() -> Self {
+        Self {
+            bg_color: Color::srgb(0.85, 0.22, 0.28),
+            border_color: Color::WHITE,
+            text_color: Color::WHITE,
+            radius: 999.0,
+            padding: USides::axes(6.0, 2.0),
+            font_size: 10.0,
+        }
+    }
+
     pub fn info() -> Self {
         Self {
             bg_color: Color::srgba(0.20, 0.50, 0.95, 0.16),
@@ -335,6 +426,281 @@ impl Default for SliderStyle {
     }
 }
 
+/// Customizable style definition for a DragValue numeric scrubber widget.
+#[derive(Clone, Debug, Reflect)]
+pub struct DragValueStyle {
+    pub bg_normal: Color,
+    pub bg_hover: Color,
+    pub bg_active: Color,
+    pub border_color: Color,
+    pub border_hover: Color,
+    pub border_active: Color,
+    pub border_width: f32,
+    pub text_color: Color,
+    pub accent_color: Color,
+    pub fill_color: Color,
+    pub radius: f32,
+    pub height: f32,
+    pub font_size: f32,
+}
+
+impl Default for DragValueStyle {
+    fn default() -> Self {
+        Self {
+            bg_normal: Color::srgb(0.14, 0.15, 0.18),
+            bg_hover: Color::srgb(0.18, 0.20, 0.25),
+            bg_active: Color::srgb(0.12, 0.14, 0.18),
+            border_color: Color::srgb(0.22, 0.25, 0.30),
+            border_hover: Color::srgb(0.32, 0.38, 0.48),
+            border_active: Color::srgb(0.35, 0.65, 1.00),
+            border_width: 1.0,
+            text_color: Color::srgb(0.92, 0.94, 0.98),
+            accent_color: Color::srgb(0.50, 0.55, 0.65),
+            fill_color: Color::srgba(0.28, 0.45, 0.70, 0.35),
+            radius: 5.0,
+            height: 28.0,
+            font_size: 13.0,
+        }
+    }
+}
+
+/// Customizable style definition for a Text Input widget.
+#[derive(Clone, Debug, Reflect)]
+pub struct InputStyle {
+    pub bg_normal: Color,
+    pub bg_focus: Color,
+    pub border_normal: Color,
+    pub border_focus: Color,
+    pub border_error: Color,
+    pub border_success: Color,
+    pub border_width: f32,
+    pub text_color: Color,
+    pub placeholder_color: Color,
+    pub radius: f32,
+    pub padding: USides,
+    pub min_height: f32,
+    pub font_size: f32,
+}
+
+impl Default for InputStyle {
+    fn default() -> Self {
+        Self::normal()
+    }
+}
+
+impl InputStyle {
+    pub fn normal() -> Self {
+        Self {
+            bg_normal: Color::srgb(0.10, 0.12, 0.16),
+            bg_focus: Color::srgb(0.12, 0.14, 0.20),
+            border_normal: Color::srgb(0.20, 0.24, 0.32),
+            border_focus: Color::srgb(0.35, 0.65, 1.00),
+            border_error: Color::srgb(0.85, 0.22, 0.28),
+            border_success: Color::srgb(0.16, 0.75, 0.45),
+            border_width: 1.0,
+            text_color: Color::srgb(0.95, 0.96, 0.98),
+            placeholder_color: Color::srgb(0.45, 0.50, 0.62),
+            radius: 8.0,
+            padding: USides::axes(14.0, 9.0),
+            min_height: 38.0,
+            font_size: 14.0,
+        }
+    }
+
+    pub fn search() -> Self {
+        Self {
+            radius: 999.0,
+            padding: USides::axes(18.0, 9.0),
+            ..Self::normal()
+        }
+    }
+
+    pub fn otp() -> Self {
+        Self {
+            radius: 8.0,
+            padding: USides::all(0.0),
+            min_height: 48.0,
+            font_size: 20.0,
+            ..Self::normal()
+        }
+    }
+
+    pub fn multiline() -> Self {
+        Self {
+            radius: 8.0,
+            padding: USides::all(12.0),
+            min_height: 90.0,
+            ..Self::normal()
+        }
+    }
+}
+
+/// Customizable style definition for a circular Spinner widget.
+#[derive(Clone, Debug, Reflect)]
+pub struct SpinnerStyle {
+    pub color: Color,
+    pub track_color: Color,
+    pub size: f32,
+    pub thickness: f32,
+    pub speed: f32,
+}
+
+impl Default for SpinnerStyle {
+    fn default() -> Self {
+        Self::md()
+    }
+}
+
+impl SpinnerStyle {
+    pub fn sm() -> Self {
+        Self {
+            color: Color::srgb(0.35, 0.65, 1.00),
+            track_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
+            size: 16.0,
+            thickness: 2.0,
+            speed: 6.0,
+        }
+    }
+
+    pub fn md() -> Self {
+        Self {
+            color: Color::srgb(0.35, 0.65, 1.00),
+            track_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
+            size: 24.0,
+            thickness: 3.0,
+            speed: 6.0,
+        }
+    }
+
+    pub fn lg() -> Self {
+        Self {
+            color: Color::srgb(0.35, 0.65, 1.00),
+            track_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
+            size: 36.0,
+            thickness: 4.0,
+            speed: 6.0,
+        }
+    }
+}
+
+/// Customizable style definition for a ListItem widget.
+#[derive(Clone, Debug, Reflect)]
+pub struct ListItemStyle {
+    pub bg_normal: Color,
+    pub bg_hover: Color,
+    pub bg_pressed: Color,
+    pub border_color: Color,
+    pub border_width: f32,
+    pub title_color: Color,
+    pub subtitle_color: Color,
+    pub radius: f32,
+    pub padding: USides,
+    pub min_height: f32,
+    pub font_size: f32,
+    pub subtitle_font_size: f32,
+}
+
+impl Default for ListItemStyle {
+    fn default() -> Self {
+        Self {
+            bg_normal: Color::NONE,
+            bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.05),
+            bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.09),
+            border_color: Color::NONE,
+            border_width: 0.0,
+            title_color: Color::srgb(0.95, 0.96, 0.98),
+            subtitle_color: Color::srgb(0.60, 0.65, 0.75),
+            radius: 8.0,
+            padding: USides::axes(12.0, 8.0),
+            min_height: 44.0,
+            font_size: 14.0,
+            subtitle_font_size: 12.0,
+        }
+    }
+}
+
+/// Customizable style definition for a Select dropdown widget.
+#[derive(Clone, Debug, Reflect)]
+pub struct SelectStyle {
+    pub bg_color: Color,
+    pub bg_hover: Color,
+    pub border_color: Color,
+    pub border_focus: Color,
+    pub border_width: f32,
+    pub text_color: Color,
+    pub radius: f32,
+    pub padding: USides,
+    pub min_height: f32,
+    pub font_size: f32,
+    pub menu_bg: Color,
+    pub menu_border: Color,
+}
+
+impl Default for SelectStyle {
+    fn default() -> Self {
+        Self {
+            bg_color: Color::srgb(0.10, 0.12, 0.16),
+            bg_hover: Color::srgb(0.14, 0.17, 0.23),
+            border_color: Color::srgb(0.20, 0.24, 0.32),
+            border_focus: Color::srgb(0.35, 0.65, 1.00),
+            border_width: 1.0,
+            text_color: Color::srgb(0.95, 0.96, 0.98),
+            radius: 8.0,
+            padding: USides::axes(14.0, 9.0),
+            min_height: 38.0,
+            font_size: 14.0,
+            menu_bg: Color::srgb(0.11, 0.13, 0.18),
+            menu_border: Color::srgb(0.22, 0.26, 0.36),
+        }
+    }
+}
+
+/// Customizable style definition for a Drawer/Sheet panel.
+#[derive(Clone, Debug, Reflect)]
+pub struct DrawerStyle {
+    pub bg_color: Color,
+    pub border_color: Color,
+    pub border_width: f32,
+    pub backdrop_color: Color,
+    pub radius: f32,
+    pub padding: USides,
+}
+
+impl Default for DrawerStyle {
+    fn default() -> Self {
+        Self {
+            bg_color: Color::srgb(0.10, 0.12, 0.17),
+            border_color: Color::srgb(0.20, 0.24, 0.34),
+            border_width: 1.0,
+            backdrop_color: Color::srgba(0.0, 0.0, 0.0, 0.6),
+            radius: 12.0,
+            padding: USides::all(20.0),
+        }
+    }
+}
+
+/// Customizable style definition for a Popover overlay.
+#[derive(Clone, Debug, Reflect)]
+pub struct PopoverStyle {
+    pub bg_color: Color,
+    pub border_color: Color,
+    pub border_width: f32,
+    pub radius: f32,
+    pub padding: USides,
+}
+
+impl Default for PopoverStyle {
+    fn default() -> Self {
+        Self {
+            bg_color: Color::srgb(0.12, 0.14, 0.20),
+            border_color: Color::srgb(0.24, 0.28, 0.38),
+            border_width: 1.0,
+            radius: 10.0,
+            padding: USides::all(12.0),
+        }
+    }
+}
+
 /// Hierarchical style scope component attached to container nodes.
 ///
 /// Any child widget inside a node with [`LumaStyleScope`] inherits these styles
@@ -346,6 +712,13 @@ pub struct LumaStyleScope {
     pub card: Option<CardStyle>,
     pub badge: Option<BadgeStyle>,
     pub slider: Option<SliderStyle>,
+    pub input: Option<InputStyle>,
+    pub spinner: Option<SpinnerStyle>,
+    pub list_item: Option<ListItemStyle>,
+    pub select: Option<SelectStyle>,
+    pub drawer: Option<DrawerStyle>,
+    pub popover: Option<PopoverStyle>,
+    pub drag_value: Option<DragValueStyle>,
 }
 
 impl LumaStyleScope {
@@ -377,6 +750,41 @@ impl LumaStyleScope {
         self.slider = Some(style);
         self
     }
+
+    pub fn input(mut self, style: InputStyle) -> Self {
+        self.input = Some(style);
+        self
+    }
+
+    pub fn spinner(mut self, style: SpinnerStyle) -> Self {
+        self.spinner = Some(style);
+        self
+    }
+
+    pub fn list_item(mut self, style: ListItemStyle) -> Self {
+        self.list_item = Some(style);
+        self
+    }
+
+    pub fn select(mut self, style: SelectStyle) -> Self {
+        self.select = Some(style);
+        self
+    }
+
+    pub fn drawer(mut self, style: DrawerStyle) -> Self {
+        self.drawer = Some(style);
+        self
+    }
+
+    pub fn popover(mut self, style: PopoverStyle) -> Self {
+        self.popover = Some(style);
+        self
+    }
+
+    pub fn drag_value(mut self, style: DragValueStyle) -> Self {
+        self.drag_value = Some(style);
+        self
+    }
 }
 
 /// Global widget theme resource.
@@ -388,6 +796,13 @@ pub struct LumaWidgetTheme {
     pub toggle: ToggleStyle,
     pub card: CardStyle,
     pub slider: SliderStyle,
+    pub input: InputStyle,
+    pub spinner: SpinnerStyle,
+    pub list_item: ListItemStyle,
+    pub select: SelectStyle,
+    pub drawer: DrawerStyle,
+    pub popover: PopoverStyle,
+    pub drag_value: DragValueStyle,
 }
 
 /// Creates a container scene that provides an inherited style scope to all its children.
@@ -398,6 +813,13 @@ pub fn luma_style_scope(scope: LumaStyleScope, children: impl Scene) -> impl Sce
         card,
         badge,
         slider,
+        input,
+        spinner,
+        list_item,
+        select,
+        drawer,
+        popover,
+        drag_value,
     } = scope;
     bsn! {
         LumaStyleScope {
@@ -406,6 +828,13 @@ pub fn luma_style_scope(scope: LumaStyleScope, children: impl Scene) -> impl Sce
             card,
             badge,
             slider,
+            input,
+            spinner,
+            list_item,
+            select,
+            drawer,
+            popover,
+            drag_value,
         }
         UNode::default()
         ULayout {
@@ -414,7 +843,7 @@ pub fn luma_style_scope(scope: LumaStyleScope, children: impl Scene) -> impl Sce
             gap: 12.0,
         }
         Children [
-            children
+            @{children}
         ]
     }
 }

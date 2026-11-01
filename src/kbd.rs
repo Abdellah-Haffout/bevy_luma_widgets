@@ -127,12 +127,12 @@ impl Scene for Kbd {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (UText {
+                UText {
                     text,
                     font_size,
                     font,
                     color: KBD_TEXT,
-                })
+                }
             ]
         };
 
@@ -159,12 +159,12 @@ pub fn luma_kbd_separator(font: Handle<Font>) -> impl Scene {
             align_items: UAlignItems::Center,
         }
         Children [
-            (UText {
+            UText {
                 text: { "+".to_string() },
                 font_size: 11.0,
                 font,
                 color: Color::srgb(0.50, 0.55, 0.65),
-            })
+            }
         ]
     }
 }
@@ -180,7 +180,7 @@ pub fn luma_kbd_shortcut(keycaps: impl Scene) -> impl Scene {
             gap: 4.0,
         }
         Children [
-            keycaps
+            @{keycaps}
         ]
     }
 }

@@ -54,12 +54,12 @@ fn static_star_scene(index: u8, active: bool, icon_font: Handle<Font>) -> impl S
             align_items: UAlignItems::Center,
         }
         Children [
-            (UText {
+            UText {
                 text: { Icon::STAR.to_string() },
                 font_size: 15.0,
                 font: icon_font,
                 color,
-            })
+            }
         ]
     }
 }
@@ -88,12 +88,12 @@ fn interactive_star_scene(index: u8, active: bool, icon_font: Handle<Font>) -> i
             align_items: UAlignItems::Center,
         }
         Children [
-            (UText {
+            UText {
                 text: { Icon::STAR.to_string() },
                 font_size: 16.0,
                 font: icon_font,
                 color,
-            })
+            }
         ]
     }
 }
@@ -175,11 +175,15 @@ impl Scene for Rating {
                     gap: 4.0,
                 }
                 Children [
-                    (interactive_star_scene(1, value >= 1, self.icon_font.clone())),
-                    (interactive_star_scene(2, value >= 2, self.icon_font.clone())),
-                    (interactive_star_scene(3, value >= 3, self.icon_font.clone())),
-                    (interactive_star_scene(4, value >= 4, self.icon_font.clone())),
-                    (interactive_star_scene(5, value >= 5, self.icon_font))
+                    @{interactive_star_scene(1, value >= 1, self.icon_font.clone())}
+                    --
+                    @{interactive_star_scene(2, value >= 2, self.icon_font.clone())}
+                    --
+                    @{interactive_star_scene(3, value >= 3, self.icon_font.clone())}
+                    --
+                    @{interactive_star_scene(4, value >= 4, self.icon_font.clone())}
+                    --
+                    @{interactive_star_scene(5, value >= 5, self.icon_font)}
                 ]
             };
             s.resolve(context, scene)
@@ -198,11 +202,15 @@ impl Scene for Rating {
                     gap: 2.0,
                 }
                 Children [
-                    (static_star_scene(1, value >= 1, self.icon_font.clone())),
-                    (static_star_scene(2, value >= 2, self.icon_font.clone())),
-                    (static_star_scene(3, value >= 3, self.icon_font.clone())),
-                    (static_star_scene(4, value >= 4, self.icon_font.clone())),
-                    (static_star_scene(5, value >= 5, self.icon_font))
+                    @{static_star_scene(1, value >= 1, self.icon_font.clone())}
+                    --
+                    @{static_star_scene(2, value >= 2, self.icon_font.clone())}
+                    --
+                    @{static_star_scene(3, value >= 3, self.icon_font.clone())}
+                    --
+                    @{static_star_scene(4, value >= 4, self.icon_font.clone())}
+                    --
+                    @{static_star_scene(5, value >= 5, self.icon_font)}
                 ]
             };
             s.resolve(context, scene)
@@ -292,7 +300,7 @@ fn set_rating(
 }
 
 fn on_star_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     parents_query: Query<&ChildOf>,
     star_query: Query<&LumaRatingStar>,
@@ -304,7 +312,7 @@ fn on_star_click(
         return;
     }
     set_rating(
-        trigger.entity.entity(),
+        trigger.entity,
         &mut commands,
         &parents_query,
         &star_query,

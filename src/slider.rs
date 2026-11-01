@@ -231,59 +231,61 @@ impl Scene for Slider {
             UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
             Children [
                 // 1. Inactive Track background bar
-                (
-                    UNode {
-                        width: { UVal::Px(width) },
-                        height: UVal::Px(trk_h),
-                        background_color: trk_bg,
-                        border_radius: UCornerRadius::all(trk_h * 0.5),
-                    }
-                    UBorder {
-                        color: Color::srgb(0.25, 0.30, 0.38),
-                        width: 1.0,
-                        radius: UCornerRadius::all(trk_h * 0.5),
-                    }
-                    USelf {
-                        position_type: UPositionType::Absolute,
-                        left: { UVal::Px(0.0) },
-                        top: { UVal::Px(track_top) },
-                    }
-                ),
+                UNode {
+                    width: { UVal::Px(width) },
+                    height: UVal::Px(trk_h),
+                    background_color: trk_bg,
+                    border_radius: UCornerRadius::all(trk_h * 0.5),
+                }
+                UBorder {
+                    color: Color::srgb(0.25, 0.30, 0.38),
+                    width: 1.0,
+                    radius: UCornerRadius::all(trk_h * 0.5),
+                }
+                USelf {
+                    position_type: UPositionType::Absolute,
+                    left: { UVal::Px(0.0) },
+                    top: { UVal::Px(track_top) },
+                }
+                --
                 // 2. Active Fill bar
-                (
-                    LumaSliderFill
-                    UNode {
-                        width: { UVal::Px(fill_width) },
-                        height: UVal::Px(trk_h),
-                        background_color: fill_col,
-                        border_radius: UCornerRadius::all(trk_h * 0.5),
-                    }
-                    USelf {
-                        position_type: UPositionType::Absolute,
-                        left: { UVal::Px(0.0) },
-                        top: { UVal::Px(track_top) },
-                    }
-                ),
+                LumaSliderFill
+                UNode {
+                    width: { UVal::Px(fill_width) },
+                    height: UVal::Px(trk_h),
+                    background_color: fill_col,
+                    border_radius: UCornerRadius::all(trk_h * 0.5),
+                }
+                USelf {
+                    position_type: UPositionType::Absolute,
+                    left: { UVal::Px(0.0) },
+                    top: { UVal::Px(track_top) },
+                }
+                --
                 // 3. Draggable Thumb Knob
-                (
-                    LumaSliderThumb
-                    UNode {
-                        width: UVal::Px(thmb_sz),
-                        height: UVal::Px(thmb_sz),
-                        background_color: thmb_col,
-                        border_radius: UCornerRadius::all(thmb_sz * 0.5),
-                    }
-                    UBorder {
-                        color: thmb_bdr,
-                        width: 2.0,
-                        radius: UCornerRadius::all(thmb_sz * 0.5),
-                    }
-                    USelf {
-                        position_type: UPositionType::Absolute,
-                        left: { UVal::Px(thumb_offset) },
-                        top: { UVal::Px(thumb_top) },
-                    }
-                )
+                LumaSliderThumb
+                UNode {
+                    width: UVal::Px(thmb_sz),
+                    height: UVal::Px(thmb_sz),
+                    background_color: thmb_col,
+                    border_radius: UCornerRadius::all(thmb_sz * 0.5),
+                }
+                UBorder {
+                    color: thmb_bdr,
+                    width: 2.0,
+                    radius: UCornerRadius::all(thmb_sz * 0.5),
+                }
+                UInteraction::default()
+                UInteractionColors {
+                    normal: thmb_col,
+                    hovered: Color::WHITE,
+                    pressed: Color::srgb(0.85, 0.90, 1.0),
+                }
+                USelf {
+                    position_type: UPositionType::Absolute,
+                    left: { UVal::Px(thumb_offset) },
+                    top: { UVal::Px(thumb_top) },
+                }
             ]
         };
 
@@ -332,27 +334,44 @@ fn update_slider_visuals(
 }
 
 fn on_slider_pointer_down(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     mut commands: Commands,
     mut slider_query: Query<(Entity, &mut LumaSlider, &GlobalTransform, &ComputedSize, Option<&Children>)>,
     mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
     mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
+    parents_query: Query<&ChildOf>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    let entity = trigger.entity.entity();
+    let target = if slider_query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query.iter_ancestors(trigger.entity).find(|&e| slider_query.contains(e))
+    };
+    let Some(entity) = target else {
+        return;
+    };
+
     if let Ok((entity, mut slider, global_tf, computed_size, children)) = slider_query.get_mut(entity) {
         if slider.disabled {
             return;
         }
 
-        let click_pos = trigger.pointer_location.position;
+        let world_pos = cameras.iter().find_map(|(cam, cam_gt)| {
+            cam.viewport_to_world_2d(cam_gt, trigger.pointer.position).ok()
+        });
+
+        let Some(world_pos) = world_pos else {
+            return;
+        };
+
         let slider_world_pos = global_tf.translation().truncate();
         let half_width = computed_size.size().x * 0.5;
         let left_edge = slider_world_pos.x - half_width;
 
-        let relative_x = (click_pos.x - left_edge).clamp(0.0, slider.width);
+        let relative_x = (world_pos.x - left_edge).clamp(0.0, slider.width);
         let ratio = if slider.width > 0.0 { relative_x / slider.width } else { 0.0 };
 
         slider.set_ratio(ratio);
@@ -368,27 +387,44 @@ fn on_slider_pointer_down(
 }
 
 fn on_slider_drag(
-    trigger: On<Pointer<Drag>>,
+    trigger: On<PointerDrag>,
     mut commands: Commands,
     mut slider_query: Query<(Entity, &mut LumaSlider, &GlobalTransform, &ComputedSize, Option<&Children>)>,
     mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
     mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
+    parents_query: Query<&ChildOf>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    let entity = trigger.entity.entity();
+    let target = if slider_query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query.iter_ancestors(trigger.entity).find(|&e| slider_query.contains(e))
+    };
+    let Some(entity) = target else {
+        return;
+    };
+
     if let Ok((entity, mut slider, global_tf, computed_size, children)) = slider_query.get_mut(entity) {
         if slider.disabled {
             return;
         }
 
-        let drag_pos = trigger.pointer_location.position;
+        let world_pos = cameras.iter().find_map(|(cam, cam_gt)| {
+            cam.viewport_to_world_2d(cam_gt, trigger.pointer.position).ok()
+        });
+
+        let Some(world_pos) = world_pos else {
+            return;
+        };
+
         let slider_world_pos = global_tf.translation().truncate();
         let half_width = computed_size.size().x * 0.5;
         let left_edge = slider_world_pos.x - half_width;
 
-        let relative_x = (drag_pos.x - left_edge).clamp(0.0, slider.width);
+        let relative_x = (world_pos.x - left_edge).clamp(0.0, slider.width);
         let ratio = if slider.width > 0.0 { relative_x / slider.width } else { 0.0 };
 
         slider.set_ratio(ratio);

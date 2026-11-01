@@ -115,12 +115,12 @@ impl Scene for BreadcrumbItem {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (UText {
+                UText {
                     text: label,
                     font_size: 13.0,
                     font,
                     color: text_color,
-                })
+                }
             ]
         };
         s.resolve(context, scene)
@@ -159,12 +159,12 @@ impl Scene for BreadcrumbSeparator {
                 align_items: UAlignItems::Center,
             }
             Children [
-                (UText {
+                UText {
                     text: { Icon::CHEVRON_RIGHT.to_string() },
                     font_size: 12.0,
                     font: icon_font,
                     color: SEPARATOR_COLOR,
-                })
+                }
             ]
         };
         s.resolve(context, scene)
@@ -223,17 +223,17 @@ pub fn luma_breadcrumb_trail(items: impl Scene) -> impl Scene {
             gap: 6.0,
         }
         Children [
-            items
+            @{items}
         ]
     }
 }
 
 fn on_breadcrumb_click(
-    trigger: On<Pointer<Click>>,
+    trigger: On<PointerClick>,
     mut commands: Commands,
     item_query: Query<&LumaBreadcrumbItem>,
 ) {
-    let entity = trigger.entity.entity();
+    let entity = trigger.entity;
     if let Ok(item) = item_query.get(entity) {
         if !item.is_current {
             commands.trigger(BreadcrumbClicked {

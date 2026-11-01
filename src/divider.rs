@@ -119,32 +119,28 @@ impl Scene for Divider {
                     gap: 12.0,
                 }
                 Children [
-                    (
-                        UNode {
-                            height: { UVal::Px(thickness) },
-                            background_color: color,
-                        }
-                        USelf {
-                            flex_grow: { Some(1.0) },
-                        }
-                    ),
-                    (
-                        UText {
-                            text: label_str,
-                            font_size: 12.0,
-                            font,
-                            color: Color::srgb(0.50, 0.55, 0.65),
-                        }
-                    ),
-                    (
-                        UNode {
-                            height: { UVal::Px(thickness) },
-                            background_color: color,
-                        }
-                        USelf {
-                            flex_grow: { Some(1.0) },
-                        }
-                    )
+                    UNode {
+                        height: { UVal::Px(thickness) },
+                        background_color: color,
+                    }
+                    USelf {
+                        flex_grow: { Some(1.0) },
+                    }
+                    --
+                    UText {
+                        text: label_str,
+                        font_size: 12.0,
+                        font,
+                        color: Color::srgb(0.50, 0.55, 0.65),
+                    }
+                    --
+                    UNode {
+                        height: { UVal::Px(thickness) },
+                        background_color: color,
+                    }
+                    USelf {
+                        flex_grow: { Some(1.0) },
+                    }
                 ]
             };
             s.resolve(context, scene)
