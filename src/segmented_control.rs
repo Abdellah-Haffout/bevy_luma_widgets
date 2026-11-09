@@ -27,12 +27,12 @@ pub struct SegmentChanged {
     pub value: String,
 }
 
-const SEGMENT_ACTIVE_BG: Color = Color::srgb(0.20, 0.45, 0.90);
+const SEGMENT_ACTIVE_BG: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
 const SEGMENT_INACTIVE_BG: Color = Color::NONE;
-const SEGMENT_ACTIVE_TEXT: Color = Color::WHITE;
-const SEGMENT_INACTIVE_TEXT: Color = Color::srgb(0.65, 0.70, 0.80);
-const CONTAINER_BG: Color = Color::srgb(0.09, 0.11, 0.15);
-const CONTAINER_BORDER: Color = Color::srgb(0.18, 0.22, 0.30);
+const SEGMENT_ACTIVE_TEXT: Color = Color::srgb_u8(0x06, 0x22, 0x18);
+const SEGMENT_INACTIVE_TEXT: Color = Color::srgb_u8(0xEC, 0xEC, 0xEE);
+const CONTAINER_BG: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
+const CONTAINER_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
 
 /// Declarative SegmentOption widget struct.
 #[derive(Clone, Debug, Reflect)]
@@ -329,6 +329,68 @@ fn on_segment_activate(
     );
 }
 
+fn keyboard_segmented_control_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
+    mut focus_state: Option<ResMut<UFocusState>>,
+    focused_query: Query<Entity, With<UFocused>>,
+    parents_query: Query<&ChildOf>,
+    mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, &Children)>,
+    mut control_query: Query<&mut LumaSegmentedControl>,
+    mut text_query: Query<&mut UText>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+
+    let left = keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::ArrowUp);
+    let right = keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::ArrowDown);
+    if !left && !right {
+        return;
+    }
+
+    let Some(focused_entity) = focused_query.iter().find(|&e| option_query.contains(e)) else {
+        return;
+    };
+
+    let Ok((_, focused_opt, _, _)) = option_query.get(focused_entity) else {
+        return;
+    };
+    let target_group = focused_opt.group.clone();
+
+    let group_entities: Vec<Entity> = option_query
+        .iter()
+        .filter(|(_, opt, _, _)| opt.group == target_group)
+        .map(|(e, _, _, _)| e)
+        .collect();
+
+    if group_entities.is_empty() {
+        return;
+    }
+
+    if let Some(pos) = group_entities.iter().position(|&e| e == focused_entity) {
+        let next_idx = if left {
+            if pos == 0 { group_entities.len() - 1 } else { pos - 1 }
+        } else {
+            (pos + 1) % group_entities.len()
+        };
+
+        let target_entity = group_entities[next_idx];
+        switch_segment(
+            target_entity,
+            &mut commands,
+            &parents_query,
+            &mut option_query,
+            &mut control_query,
+            &mut text_query,
+        );
+
+        if let Some(ref mut state) = focus_state {
+            set_focus(&mut commands, state, Some(target_entity), FocusModality::Keyboard);
+        }
+    }
+}
+
 pub struct LumaSegmentedControlPlugin;
 
 impl Plugin for LumaSegmentedControlPlugin {
@@ -336,6 +398,7 @@ impl Plugin for LumaSegmentedControlPlugin {
         app.register_type::<LumaSegmentedControl>()
             .register_type::<LumaSegmentOption>()
             .add_observer(on_segment_click)
-            .add_observer(on_segment_activate);
+            .add_observer(on_segment_activate)
+            .add_systems(Update, keyboard_segmented_control_system);
     }
 }

@@ -1,5 +1,6 @@
 //! Navigation and structural widgets for Bevy Luma.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -1337,11 +1338,49 @@ impl Scene for ContextMenu {
 // 2.12 Command Palette
 // ============================================================================
 
-/// Fast keyboard command launcher (Ctrl + K) overlay dialog.
+/// State and marker component attached to a Command Palette root entity.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaCommandPalette {
+    pub commands: Vec<String>,
+    pub filtered_indices: Vec<usize>,
+    pub selected_index: usize,
+    pub is_overlay: bool,
+    pub is_open: bool,
+}
+
+/// Marker component for individual command row items within the palette.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaCommandPaletteItem {
+    pub command_index: usize,
+}
+
+/// Marker component for the container holding command rows.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaCommandPaletteList;
+
+/// Marker component for the Command Palette full-screen backdrop.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaCommandPaletteBackdrop;
+
+/// Marker component for the "No results found" placeholder row.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaCommandPaletteEmpty;
+
+/// Event fired when a command is selected / executed from the Command Palette.
+#[derive(Event, Clone, Debug, Reflect)]
+pub struct CommandSelected {
+    pub palette_entity: Entity,
+    pub index: usize,
+    pub command: String,
+}
+
+/// Fast keyboard command launcher (Ctrl + K) overlay or inline dialog.
 #[derive(Clone, Debug, Reflect)]
 pub struct CommandPalette {
     pub placeholder: String,
     pub commands: Vec<String>,
+    pub is_overlay: bool,
+    pub is_open: bool,
     pub font: Handle<Font>,
     pub icon_font: Handle<Font>,
 }
@@ -1356,6 +1395,8 @@ impl Default for CommandPalette {
                 "Go to File...".into(),
                 "Open Documentation".into(),
             ],
+            is_overlay: false,
+            is_open: true,
             font: Handle::default(),
             icon_font: Handle::default(),
         }
@@ -1369,6 +1410,16 @@ impl CommandPalette {
 
     pub fn commands(mut self, cmds: Vec<impl Into<String>>) -> Self {
         self.commands = cmds.into_iter().map(|s| s.into()).collect();
+        self
+    }
+
+    pub fn overlay(mut self, is_overlay: bool) -> Self {
+        self.is_overlay = is_overlay;
+        self
+    }
+
+    pub fn open(mut self, is_open: bool) -> Self {
+        self.is_open = is_open;
         self
     }
 
@@ -1391,16 +1442,31 @@ impl Scene for CommandPalette {
     ) -> Result<(), ResolveSceneError> {
         let font = self.font;
         let icon_font = self.icon_font;
+        let total_cmds = self.commands.len();
+        let filtered_indices: Vec<usize> = (0..total_cmds).collect();
 
-        let cmd_rows: Vec<_> = self.commands.into_iter().map(|cmd| {
+        let cmd_rows: Vec<_> = self.commands.iter().enumerate().map(|(idx, cmd)| {
             let f = font.clone();
             let ifont = icon_font.clone();
+            let cmd_text = cmd.clone();
+            let is_selected = idx == 0;
+            let bg_color = if is_selected {
+                Color::srgba(0.20, 0.45, 0.85, 0.25)
+            } else {
+                Color::srgba(1.0, 1.0, 1.0, 0.03)
+            };
+
             bsn! {
+                LumaCommandPaletteItem {
+                    command_index: idx,
+                }
                 UNode {
+                    width: UVal::Percent(1.0),
                     padding: USides::axes(12.0, 8.0),
                     border_radius: UCornerRadius::all(6.0),
-                    background_color: Color::srgba(1.0, 1.0, 1.0, 0.03),
+                    background_color: bg_color,
                 }
+                UInteraction::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
@@ -1416,7 +1482,7 @@ impl Scene for CommandPalette {
                     }
                     --
                     UText {
-                        text: cmd,
+                        text: cmd_text,
                         font_size: 13.0,
                         color: Color::srgb(0.9, 0.92, 0.98),
                         font: f,
@@ -1428,7 +1494,43 @@ impl Scene for CommandPalette {
         let cmd_rows_scene = SceneList::new(cmd_rows);
         let input_font = font.clone();
         let input_ifont = icon_font.clone();
-        let s = bsn! {
+        let empty_font = font.clone();
+
+        let empty_row = bsn! {
+            LumaCommandPaletteEmpty
+            UNode {
+                width: UVal::Percent(1.0),
+                padding: USides::axes(12.0, 12.0),
+                border_radius: UCornerRadius::all(6.0),
+                background_color: Color::srgba(1.0, 1.0, 1.0, 0.02),
+            }
+            ULayout {
+                display: UDisplay::None,
+                justify_content: UJustifyContent::Center,
+                align_items: UAlignItems::Center,
+            }
+            Children [
+                UText {
+                    text: { "No commands found".to_string() },
+                    font_size: 13.0,
+                    color: Color::srgb(0.55, 0.60, 0.70),
+                    font: empty_font,
+                }
+            ]
+        };
+
+        let commands_for_palette = self.commands;
+        let is_open_val = self.is_open;
+        let is_overlay = self.is_overlay;
+
+        let dialog_box = bsn! {
+            LumaCommandPalette {
+                commands: commands_for_palette,
+                filtered_indices,
+                selected_index: 0,
+                is_overlay,
+                is_open: is_open_val,
+            }
             UNode {
                 width: UVal::Px(480.0),
                 padding: USides::all(16.0),
@@ -1440,6 +1542,7 @@ impl Scene for CommandPalette {
                 width: 1.0,
                 radius: UCornerRadius::all(10.0),
             }
+            UShadow::drop(Color::srgba(0.0, 0.0, 0.0, 0.5), Vec2::new(0.0, 8.0), 16.0)
             ULayout {
                 display: UDisplay::Flex,
                 flex_direction: UFlexDirection::Column,
@@ -1448,6 +1551,7 @@ impl Scene for CommandPalette {
             Children [
                 @{TextInput::new(self.placeholder).leading_icon(Icon::SEARCH).font(input_font).icon_font(input_ifont)}
                 --
+                LumaCommandPaletteList
                 UNode::default()
                 ULayout {
                     display: UDisplay::Flex,
@@ -1456,10 +1560,308 @@ impl Scene for CommandPalette {
                 }
                 Children [
                     {cmd_rows_scene}
+                    --
+                    @{empty_row}
                 ]
             ]
         };
-        s.resolve(context, scene)
+
+        if is_overlay {
+            let display_mode = if is_open_val { UDisplay::Flex } else { UDisplay::None };
+            let overlay_root = bsn! {
+                LumaCommandPaletteBackdrop
+                UNode {
+                    width: UVal::Percent(1.0),
+                    height: UVal::Percent(1.0),
+                    background_color: Color::srgba(0.0, 0.0, 0.0, 0.60),
+                    padding: USides::top(100.0),
+                }
+                USelf {
+                    position_type: UPositionType::Absolute,
+                    left: UVal::Px(0.0),
+                    right: UVal::Px(0.0),
+                    top: UVal::Px(0.0),
+                    bottom: UVal::Px(0.0),
+                    ..USelf::default()
+                }
+                UZIndex::Global(100)
+                ULayout {
+                    display: display_mode,
+                    align_items: UAlignItems::Center,
+                    justify_content: UJustifyContent::Start,
+                    flex_direction: UFlexDirection::Column,
+                }
+                Children [
+                    @{dialog_box}
+                ]
+            };
+            overlay_root.resolve(context, scene)
+        } else {
+            dialog_box.resolve(context, scene)
+        }
+    }
+}
+
+fn on_command_palette_text_changed(
+    trigger: On<UTextInputChanged>,
+    parents_query: Query<&ChildOf>,
+    mut palette_query: Query<&mut LumaCommandPalette>,
+    mut item_query: Query<(Entity, &LumaCommandPaletteItem, &mut ULayout, &mut UNode)>,
+    mut empty_query: Query<(Entity, &mut ULayout), (With<LumaCommandPaletteEmpty>, Without<LumaCommandPaletteItem>)>,
+) {
+    let Some(palette_entity) = parents_query.iter_ancestors(trigger.entity).find(|&e| palette_query.contains(e)) else {
+        return;
+    };
+    let Ok(mut palette) = palette_query.get_mut(palette_entity) else {
+        return;
+    };
+
+    let query = trigger.value.to_lowercase().trim().to_string();
+    palette.filtered_indices = palette
+        .commands
+        .iter()
+        .enumerate()
+        .filter(|(_, cmd)| query.is_empty() || cmd.to_lowercase().contains(&query))
+        .map(|(i, _)| i)
+        .collect();
+
+    palette.selected_index = 0;
+    let selected_actual = palette.filtered_indices.first().copied();
+
+    for (item_entity, item, mut layout, mut node) in item_query.iter_mut() {
+        if parents_query.iter_ancestors(item_entity).any(|a| a == palette_entity) {
+            let is_match = palette.filtered_indices.contains(&item.command_index);
+            layout.display = if is_match { UDisplay::Flex } else { UDisplay::None };
+
+            let is_sel = selected_actual == Some(item.command_index);
+            node.background_color = if is_sel {
+                Color::srgba(0.20, 0.45, 0.85, 0.25)
+            } else {
+                Color::srgba(1.0, 1.0, 1.0, 0.03)
+            };
+        }
+    }
+
+    for (empty_entity, mut layout) in empty_query.iter_mut() {
+        if parents_query.iter_ancestors(empty_entity).any(|a| a == palette_entity) {
+            layout.display = if palette.filtered_indices.is_empty() {
+                UDisplay::Flex
+            } else {
+                UDisplay::None
+            };
+        }
+    }
+}
+
+fn on_command_palette_row_over(
+    trigger: On<PointerOver>,
+    parents_query: Query<&ChildOf>,
+    mut palette_query: Query<&mut LumaCommandPalette>,
+    mut all_items: Query<(Entity, &LumaCommandPaletteItem, &mut UNode)>,
+) {
+    let Ok((_, hovered_item, _)) = all_items.get(trigger.entity) else { return; };
+    let Some(palette_entity) = parents_query.iter_ancestors(trigger.entity).find(|&e| palette_query.contains(e)) else { return; };
+    let Ok(mut palette) = palette_query.get_mut(palette_entity) else { return; };
+
+    if let Some(pos) = palette.filtered_indices.iter().position(|&idx| idx == hovered_item.command_index) {
+        palette.selected_index = pos;
+        let selected_actual = hovered_item.command_index;
+
+        for (item_entity, item, mut node) in all_items.iter_mut() {
+            if parents_query.iter_ancestors(item_entity).any(|a| a == palette_entity) {
+                node.background_color = if item.command_index == selected_actual {
+                    Color::srgba(0.20, 0.45, 0.85, 0.25)
+                } else {
+                    Color::srgba(1.0, 1.0, 1.0, 0.03)
+                };
+            }
+        }
+    }
+}
+
+fn on_command_palette_row_click(
+    trigger: On<PointerClick>,
+    parents_query: Query<&ChildOf>,
+    item_query: Query<&LumaCommandPaletteItem>,
+    mut palette_query: Query<(Entity, &mut LumaCommandPalette)>,
+    mut backdrop_query: Query<&mut ULayout, With<LumaCommandPaletteBackdrop>>,
+    mut commands: Commands,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+    let Ok(clicked_item) = item_query.get(trigger.entity) else { return; };
+    let Some(palette_entity) = parents_query.iter_ancestors(trigger.entity).find(|&e| palette_query.contains(e)) else { return; };
+    let Ok((_, mut palette)) = palette_query.get_mut(palette_entity) else { return; };
+
+    if let Some(cmd_text) = palette.commands.get(clicked_item.command_index).cloned() {
+        commands.trigger(CommandSelected {
+            palette_entity,
+            index: clicked_item.command_index,
+            command: cmd_text,
+        });
+
+        if palette.is_overlay {
+            palette.is_open = false;
+            for ancestor in parents_query.iter_ancestors(palette_entity) {
+                if let Ok(mut bd_layout) = backdrop_query.get_mut(ancestor) {
+                    bd_layout.display = UDisplay::None;
+                }
+            }
+        }
+    }
+}
+
+fn on_command_palette_backdrop_click(
+    trigger: On<PointerClick>,
+    backdrop_query: Query<&LumaCommandPaletteBackdrop>,
+    children_query: Query<&Children>,
+    mut palette_query: Query<&mut LumaCommandPalette>,
+    mut layout_query: Query<&mut ULayout>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+    if !backdrop_query.contains(trigger.entity) {
+        return;
+    }
+    if let Ok(mut bd_layout) = layout_query.get_mut(trigger.entity) {
+        bd_layout.display = UDisplay::None;
+    }
+    if let Ok(children) = children_query.get(trigger.entity) {
+        for child in children.iter() {
+            if let Ok(mut palette) = palette_query.get_mut(child) {
+                palette.is_open = false;
+            }
+        }
+    }
+}
+
+fn command_palette_keyboard_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    parents_query: Query<&ChildOf>,
+    focused_query: Query<Entity, With<UFocused>>,
+    mut palette_query: Query<(Entity, &mut LumaCommandPalette)>,
+    mut backdrop_query: Query<&mut ULayout, With<LumaCommandPaletteBackdrop>>,
+    mut item_query: Query<(Entity, &LumaCommandPaletteItem, &mut UNode)>,
+    mut commands: Commands,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+
+    let ctrl = keyboard.pressed(KeyCode::ControlLeft)
+        || keyboard.pressed(KeyCode::ControlRight)
+        || keyboard.pressed(KeyCode::SuperLeft)
+        || keyboard.pressed(KeyCode::SuperRight);
+
+    if ctrl && keyboard.just_pressed(KeyCode::KeyK) {
+        for (palette_entity, mut palette) in palette_query.iter_mut() {
+            if palette.is_overlay {
+                palette.is_open = !palette.is_open;
+                let display = if palette.is_open { UDisplay::Flex } else { UDisplay::None };
+                for ancestor in parents_query.iter_ancestors(palette_entity) {
+                    if let Ok(mut bd_layout) = backdrop_query.get_mut(ancestor) {
+                        bd_layout.display = display;
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    let focused_entities: Vec<Entity> = focused_query.iter().collect();
+
+    for (palette_entity, mut palette) in palette_query.iter_mut() {
+        if !palette.is_open {
+            continue;
+        }
+
+        let is_focused = focused_entities.iter().any(|&f| {
+            f == palette_entity || parents_query.iter_ancestors(f).any(|a| a == palette_entity)
+        });
+
+        if !is_focused && !palette.is_overlay {
+            continue;
+        }
+
+        if keyboard.just_pressed(KeyCode::Escape) {
+            if palette.is_overlay {
+                palette.is_open = false;
+                for ancestor in parents_query.iter_ancestors(palette_entity) {
+                    if let Ok(mut bd_layout) = backdrop_query.get_mut(ancestor) {
+                        bd_layout.display = UDisplay::None;
+                    }
+                }
+            }
+            continue;
+        }
+
+        if palette.filtered_indices.is_empty() {
+            continue;
+        }
+
+        let mut changed = false;
+        if keyboard.just_pressed(KeyCode::ArrowDown) {
+            if palette.selected_index + 1 < palette.filtered_indices.len() {
+                palette.selected_index += 1;
+                changed = true;
+            }
+        } else if keyboard.just_pressed(KeyCode::ArrowUp) {
+            if palette.selected_index > 0 {
+                palette.selected_index -= 1;
+                changed = true;
+            }
+        } else if keyboard.just_pressed(KeyCode::Enter) || keyboard.just_pressed(KeyCode::NumpadEnter) {
+            let actual_idx = palette.filtered_indices[palette.selected_index];
+            if let Some(cmd_text) = palette.commands.get(actual_idx).cloned() {
+                commands.trigger(CommandSelected {
+                    palette_entity,
+                    index: actual_idx,
+                    command: cmd_text,
+                });
+
+                if palette.is_overlay {
+                    palette.is_open = false;
+                    for ancestor in parents_query.iter_ancestors(palette_entity) {
+                        if let Ok(mut bd_layout) = backdrop_query.get_mut(ancestor) {
+                            bd_layout.display = UDisplay::None;
+                        }
+                    }
+                }
+            }
+        }
+
+        if changed {
+            let selected_actual = palette.filtered_indices[palette.selected_index];
+            for (item_entity, item, mut node) in item_query.iter_mut() {
+                if parents_query.iter_ancestors(item_entity).any(|a| a == palette_entity) {
+                    node.background_color = if item.command_index == selected_actual {
+                        Color::srgba(0.20, 0.45, 0.85, 0.25)
+                    } else {
+                        Color::srgba(1.0, 1.0, 1.0, 0.03)
+                    };
+                }
+            }
+        }
+    }
+}
+
+pub struct LumaNavigationPlugin;
+
+impl Plugin for LumaNavigationPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<LumaCommandPalette>()
+            .register_type::<LumaCommandPaletteItem>()
+            .register_type::<LumaCommandPaletteList>()
+            .register_type::<LumaCommandPaletteBackdrop>()
+            .register_type::<LumaCommandPaletteEmpty>()
+            .register_type::<CommandSelected>()
+            .add_observer(on_command_palette_text_changed)
+            .add_observer(on_command_palette_row_over)
+            .add_observer(on_command_palette_row_click)
+            .add_observer(on_command_palette_backdrop_click)
+            .add_systems(Update, command_palette_keyboard_system);
     }
 }
 

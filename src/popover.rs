@@ -1,5 +1,6 @@
 //! Floating popover overlay card widget.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -11,6 +12,10 @@ use crate::theme::PopoverStyle;
 pub struct LumaPopover {
     pub is_open: bool,
 }
+
+/// Event triggered to close an open popover.
+#[derive(Event, Clone, Copy, Debug)]
+pub struct ClosePopover(pub Entity);
 
 /// Declarative Popover overlay widget struct.
 #[derive(Clone, Debug, Reflect)]
@@ -85,11 +90,14 @@ impl Scene for Popover {
                 border_radius: UCornerRadius::all(radius),
                 padding,
             }
+            UZIndex::Global(100)
+            UShadow::drop(Color::srgba(0.0, 0.0, 0.0, 0.6), Vec2::new(0.0, 8.0), 20.0)
             UBorder {
                 color: border_color,
                 width: border_width,
                 radius: UCornerRadius::all(radius),
             }
+            UInteraction::default()
             ULayout {
                 display: { if is_open { UDisplay::Flex } else { UDisplay::None } },
                 flex_direction: UFlexDirection::Column,
@@ -106,11 +114,52 @@ pub fn luma_popover() -> Popover {
     Popover::new()
 }
 
-/// Plugin registering popover types.
+fn on_popover_outside_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    popover_query: Query<(Entity, &LumaPopover)>,
+    parents_query: Query<&ChildOf>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+
+    let clicked = trigger.entity;
+
+    for (popover_entity, popover) in popover_query.iter() {
+        if !popover.is_open {
+            continue;
+        }
+
+        let is_inside = clicked == popover_entity
+            || parents_query
+                .iter_ancestors(clicked)
+                .any(|e| e == popover_entity);
+
+        if !is_inside {
+            commands.trigger(ClosePopover(popover_entity));
+        }
+    }
+}
+
+fn on_close_popover_event(
+    trigger: On<ClosePopover>,
+    mut popover_query: Query<(&mut LumaPopover, &mut ULayout)>,
+) {
+    let entity = trigger.event().0;
+    if let Ok((mut popover, mut layout)) = popover_query.get_mut(entity) {
+        popover.is_open = false;
+        layout.display = UDisplay::None;
+    }
+}
+
+/// Plugin registering popover systems and observers.
 pub struct LumaPopoverPlugin;
 
 impl Plugin for LumaPopoverPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<LumaPopover>();
+        app.register_type::<LumaPopover>()
+            .add_observer(on_popover_outside_click)
+            .add_observer(on_close_popover_event);
     }
 }

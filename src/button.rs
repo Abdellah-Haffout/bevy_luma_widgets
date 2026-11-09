@@ -30,9 +30,9 @@ pub enum ButtonSize {
 impl ButtonSize {
     pub fn padding(&self) -> USides {
         match self {
-            ButtonSize::Small => USides::axes(10.0, 6.0),
-            ButtonSize::Medium => USides::axes(16.0, 9.0),
-            ButtonSize::Large => USides::axes(22.0, 13.0),
+            ButtonSize::Small => USides::axes(10.0, 5.0),
+            ButtonSize::Medium => USides::axes(14.0, 8.0),
+            ButtonSize::Large => USides::axes(20.0, 11.0),
         }
     }
 
@@ -47,7 +47,7 @@ impl ButtonSize {
     pub fn icon_size(&self) -> f32 {
         match self {
             ButtonSize::Small => 14.0,
-            ButtonSize::Medium => 16.0,
+            ButtonSize::Medium => 15.0,
             ButtonSize::Large => 18.0,
         }
     }
@@ -62,9 +62,9 @@ impl ButtonSize {
 
     pub fn min_height(&self) -> f32 {
         match self {
-            ButtonSize::Small => 30.0,
-            ButtonSize::Medium => 38.0,
-            ButtonSize::Large => 46.0,
+            ButtonSize::Small => 28.0,
+            ButtonSize::Medium => 34.0,
+            ButtonSize::Large => 42.0,
         }
     }
 }
@@ -75,6 +75,7 @@ pub struct LumaButton {
     pub variant: ButtonVariant,
     pub size: ButtonSize,
     pub disabled: bool,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaButton {
@@ -83,6 +84,7 @@ impl Default for LumaButton {
             variant: ButtonVariant::Primary,
             size: ButtonSize::Medium,
             disabled: false,
+            has_explicit_style: false,
         }
     }
 }
@@ -105,44 +107,44 @@ impl ButtonVariant {
     pub fn colors(&self) -> ButtonStyleColors {
         match self {
             ButtonVariant::Primary => ButtonStyleColors {
-                bg_normal: Color::srgb(0.20, 0.45, 0.90),
-                bg_hover: Color::srgb(0.28, 0.55, 1.00),
-                bg_pressed: Color::srgb(0.14, 0.35, 0.75),
-                border_color: Color::srgb(0.30, 0.55, 1.00),
+                bg_normal: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+                bg_hover: Color::srgb_u8(0x3D, 0xE2, 0xAC),
+                bg_pressed: Color::srgb_u8(0x17, 0xB8, 0x84),
+                border_color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
                 border_width: 1.0,
-                text_color: Color::WHITE,
+                text_color: Color::srgb_u8(0x06, 0x22, 0x18),
             },
             ButtonVariant::Secondary => ButtonStyleColors {
-                bg_normal: Color::srgb(0.18, 0.20, 0.27),
-                bg_hover: Color::srgb(0.24, 0.27, 0.36),
-                bg_pressed: Color::srgb(0.13, 0.15, 0.20),
-                border_color: Color::srgb(0.25, 0.28, 0.38),
+                bg_normal: Color::srgb_u8(0x18, 0x18, 0x1B),
+                bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+                bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
+                border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
                 border_width: 1.0,
-                text_color: Color::srgb(0.95, 0.96, 0.98),
+                text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             },
             ButtonVariant::Outline => ButtonStyleColors {
-                bg_normal: Color::NONE,
-                bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.08),
-                bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.14),
-                border_color: Color::srgb(0.35, 0.40, 0.52),
+                bg_normal: Color::srgb_u8(0x12, 0x12, 0x14),
+                bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+                bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
+                border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
                 border_width: 1.0,
-                text_color: Color::srgb(0.90, 0.92, 0.96),
+                text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             },
             ButtonVariant::Ghost => ButtonStyleColors {
                 bg_normal: Color::NONE,
-                bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.08),
-                bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.14),
+                bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.06),
+                bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.12),
                 border_color: Color::NONE,
                 border_width: 0.0,
-                text_color: Color::srgb(0.90, 0.92, 0.96),
+                text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             },
             ButtonVariant::Danger => ButtonStyleColors {
-                bg_normal: Color::srgb(0.85, 0.22, 0.28),
-                bg_hover: Color::srgb(0.95, 0.30, 0.36),
-                bg_pressed: Color::srgb(0.70, 0.16, 0.22),
-                border_color: Color::srgb(0.95, 0.35, 0.40),
+                bg_normal: Color::srgb_u8(0x3B, 0x12, 0x13),
+                bg_hover: Color::srgb_u8(0x4A, 0x17, 0x18),
+                bg_pressed: Color::srgb_u8(0x30, 0x0E, 0x0F),
+                border_color: Color::srgb_u8(0x52, 0x1C, 0x1D),
                 border_width: 1.0,
-                text_color: Color::WHITE,
+                text_color: Color::srgb_u8(0xF4, 0x6B, 0x6B),
             },
         }
     }
@@ -328,6 +330,7 @@ impl Scene for Button {
             (radius, padding, min_height, UVal::Auto)
         };
 
+        let has_explicit_style = self.style.is_some();
         let icon_size = self.size.icon_size();
         let icon_text = self.icon.clone().unwrap_or_default();
         let has_icon = self.icon.is_some() && !self.loading;
@@ -345,6 +348,7 @@ impl Scene for Button {
                 variant,
                 size,
                 disabled,
+                has_explicit_style,
             }
             UNode {
                 width,

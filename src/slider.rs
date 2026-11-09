@@ -359,20 +359,26 @@ fn on_slider_pointer_down(
             return;
         }
 
-        let world_pos = cameras.iter().find_map(|(cam, cam_gt)| {
-            cam.viewport_to_world_2d(cam_gt, trigger.pointer.position).ok()
+        let hit_world = trigger.hit.position.or_else(|| {
+            cameras.iter().find_map(|(cam, cam_gt)| {
+                cam.viewport_to_world_2d(cam_gt, trigger.pointer.position)
+                    .ok()
+                    .map(|p| Vec3::new(p.x, p.y, global_tf.translation().z))
+            })
         });
 
-        let Some(world_pos) = world_pos else {
+        let Some(hit_world) = hit_world else {
             return;
         };
 
-        let slider_world_pos = global_tf.translation().truncate();
-        let half_width = computed_size.size().x * 0.5;
-        let left_edge = slider_world_pos.x - half_width;
+        let local_hit = global_tf
+            .to_matrix()
+            .inverse()
+            .transform_point3(hit_world);
 
-        let relative_x = (world_pos.x - left_edge).clamp(0.0, slider.width);
-        let ratio = if slider.width > 0.0 { relative_x / slider.width } else { 0.0 };
+        let track_width = if slider.width > 0.0 { slider.width } else { computed_size.size().x };
+        let relative_x = (local_hit.x + track_width * 0.5).clamp(0.0, track_width);
+        let ratio = if track_width > 0.0 { relative_x / track_width } else { 0.0 };
 
         slider.set_ratio(ratio);
         let new_value = slider.value;
@@ -412,20 +418,24 @@ fn on_slider_drag(
             return;
         }
 
-        let world_pos = cameras.iter().find_map(|(cam, cam_gt)| {
-            cam.viewport_to_world_2d(cam_gt, trigger.pointer.position).ok()
+        let hit_world = cameras.iter().find_map(|(cam, cam_gt)| {
+            cam.viewport_to_world_2d(cam_gt, trigger.pointer.position)
+                .ok()
+                .map(|p| Vec3::new(p.x, p.y, global_tf.translation().z))
         });
 
-        let Some(world_pos) = world_pos else {
+        let Some(hit_world) = hit_world else {
             return;
         };
 
-        let slider_world_pos = global_tf.translation().truncate();
-        let half_width = computed_size.size().x * 0.5;
-        let left_edge = slider_world_pos.x - half_width;
+        let local_hit = global_tf
+            .to_matrix()
+            .inverse()
+            .transform_point3(hit_world);
 
-        let relative_x = (world_pos.x - left_edge).clamp(0.0, slider.width);
-        let ratio = if slider.width > 0.0 { relative_x / slider.width } else { 0.0 };
+        let track_width = if slider.width > 0.0 { slider.width } else { computed_size.size().x };
+        let relative_x = (local_hit.x + track_width * 0.5).clamp(0.0, track_width);
+        let ratio = if track_width > 0.0 { relative_x / track_width } else { 0.0 };
 
         slider.set_ratio(ratio);
         let new_value = slider.value;
@@ -439,6 +449,52 @@ fn on_slider_drag(
     }
 }
 
+fn keyboard_slider_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
+    mut slider_query: Query<(Entity, &mut LumaSlider, Option<&Children>), With<UFocused>>,
+    mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
+    mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+
+    let left = keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::ArrowDown);
+    let right = keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::ArrowUp);
+
+    if !left && !right {
+        return;
+    }
+
+    for (entity, mut slider, children) in slider_query.iter_mut() {
+        if slider.disabled {
+            continue;
+        }
+
+        let delta = if let Some(step) = slider.step {
+            step
+        } else {
+            ((slider.max - slider.min) * 0.05).max(1.0)
+        };
+
+        let new_val = if right {
+            (slider.value + delta).clamp(slider.min, slider.max)
+        } else {
+            (slider.value - delta).clamp(slider.min, slider.max)
+        };
+
+        if (new_val - slider.value).abs() > f32::EPSILON {
+            slider.value = new_val;
+            update_slider_visuals(&slider, children, &mut fill_query, &mut thumb_query);
+            commands.trigger(SliderChanged {
+                entity,
+                value: new_val,
+            });
+        }
+    }
+}
+
 pub struct LumaSliderPlugin;
 
 impl Plugin for LumaSliderPlugin {
@@ -447,6 +503,7 @@ impl Plugin for LumaSliderPlugin {
             .register_type::<LumaSliderFill>()
             .register_type::<LumaSliderThumb>()
             .add_observer(on_slider_pointer_down)
-            .add_observer(on_slider_drag);
+            .add_observer(on_slider_drag)
+            .add_systems(Update, keyboard_slider_system);
     }
 }

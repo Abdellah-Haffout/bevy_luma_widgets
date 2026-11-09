@@ -36,8 +36,8 @@ pub struct RatingChanged {
     pub value: u8,
 }
 
-pub const STAR_ACTIVE_COLOR: Color = Color::srgb(1.0, 0.78, 0.18);
-pub const STAR_INACTIVE_COLOR: Color = Color::srgb(0.28, 0.32, 0.42);
+pub const STAR_ACTIVE_COLOR: Color = Color::srgb(0.98, 0.78, 0.12);
+pub const STAR_INACTIVE_COLOR: Color = Color::srgb(0.30, 0.30, 0.33);
 
 fn static_star_scene(index: u8, active: bool, icon_font: Handle<Font>) -> impl Scene {
     let color = if active { STAR_ACTIVE_COLOR } else { STAR_INACTIVE_COLOR };

@@ -597,11 +597,42 @@ impl Scene for TimePicker {
     }
 }
 
-/// 1.21 Color Picker: color preview tile + hex code.
+/// Marker component for an interactive ColorPicker container.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaColorPicker {
+    pub current_color: Color,
+    pub current_hex: String,
+}
+
+/// Marker component for the active color preview box inside a ColorPicker.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaColorPickerPreview;
+
+/// Marker component for the hex text label inside a ColorPicker.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaColorPickerHex;
+
+/// Component attached to palette swatch items in ColorPicker.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaColorPickerSwatch {
+    pub color: Color,
+    pub hex: String,
+}
+
+/// Event triggered when a color is picked in a ColorPicker.
+#[derive(Event, Clone, Debug)]
+pub struct ColorPickerChanged {
+    pub entity: Entity,
+    pub color: Color,
+    pub hex: String,
+}
+
+/// 1.21 Color Picker: color preview tile + hex code + quick palette swatches.
 #[derive(Clone, Debug, Reflect)]
 pub struct ColorPicker {
     pub color: Color,
     pub hex: String,
+    pub palette: Vec<(Color, String)>,
     pub font: Handle<Font>,
 }
 
@@ -610,6 +641,14 @@ impl Default for ColorPicker {
         Self {
             color: Color::srgb(0.20, 0.45, 0.90),
             hex: "#3373E6".to_string(),
+            palette: vec![
+                (Color::srgb(0.90, 0.25, 0.25), "#E64040".to_string()),
+                (Color::srgb(0.95, 0.60, 0.15), "#F29926".to_string()),
+                (Color::srgb(0.20, 0.75, 0.40), "#33BF66".to_string()),
+                (Color::srgb(0.20, 0.45, 0.90), "#3373E6".to_string()),
+                (Color::srgb(0.65, 0.30, 0.85), "#A64DD9".to_string()),
+                (Color::srgb(0.95, 0.35, 0.65), "#F259A6".to_string()),
+            ],
             font: Handle::default(),
         }
     }
@@ -623,6 +662,11 @@ impl ColorPicker {
             ..default()
         }
     }
+
+    pub fn palette(mut self, palette: Vec<(Color, String)>) -> Self {
+        self.palette = palette;
+        self
+    }
 }
 
 impl Scene for ColorPicker {
@@ -634,8 +678,45 @@ impl Scene for ColorPicker {
         let color = self.color;
         let hex = self.hex;
         let font = self.font;
+        let palette = self.palette;
+
+        let swatch_nodes: Vec<_> = palette
+            .into_iter()
+            .map(|(sw_color, sw_hex)| {
+                bsn! {
+                    UNode {
+                        width: UVal::Px(16.0),
+                        height: UVal::Px(16.0),
+                        background_color: sw_color,
+                        border_radius: UCornerRadius::all(8.0),
+                    }
+                    LumaColorPickerSwatch {
+                        color: sw_color,
+                        hex: sw_hex,
+                    }
+                    UInteraction::default()
+                    UInteractionColors {
+                        normal: sw_color,
+                        hovered: Color::WHITE,
+                        pressed: sw_color,
+                    }
+                    UBorder {
+                        color: Color::srgba(1.0, 1.0, 1.0, 0.25),
+                        width: 1.0,
+                        radius: UCornerRadius::all(8.0),
+                    }
+                }
+            })
+            .collect();
+
+        let current_hex = hex.clone();
+        let swatches_scene = crate::navigation::SceneList::new(swatch_nodes);
 
         let s = bsn! {
+            LumaColorPicker {
+                current_color: color,
+                current_hex,
+            }
             UNode {
                 background_color: Color::srgb(0.10, 0.12, 0.16),
                 border_radius: UCornerRadius::all(8.0),
@@ -659,16 +740,131 @@ impl Scene for ColorPicker {
                     background_color: color,
                     border_radius: UCornerRadius::all(4.0),
                 }
-                --
-                UText {
-                    text: hex,
-                    font_size: 13.0,
-                    font,
-                    color: Color::WHITE,
+                LumaColorPickerPreview
+                UBorder {
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.2),
+                    width: 1.0,
+                    radius: UCornerRadius::all(4.0),
                 }
+                --
+                UNode::default()
+                Children [
+                    LumaColorPickerHex
+                    UText {
+                        text: hex,
+                        font_size: 13.0,
+                        font,
+                        color: Color::WHITE,
+                    }
+                ]
+                --
+                // Divider
+                UNode {
+                    width: UVal::Px(1.0),
+                    height: UVal::Px(16.0),
+                    background_color: Color::srgb(0.22, 0.26, 0.36),
+                }
+                --
+                // Palette row
+                UNode::default()
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    gap: 6.0,
+                }
+                Children [
+                    @{swatches_scene}
+                ]
             ]
         };
         s.resolve(context, scene)
+    }
+}
+
+fn on_color_picker_swatch_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    swatch_query: Query<&LumaColorPickerSwatch>,
+    mut picker_query: Query<(Entity, &mut LumaColorPicker, &Children)>,
+    mut preview_query: Query<&mut UNode, With<LumaColorPickerPreview>>,
+    mut hex_text_query: Query<&mut UText, With<LumaColorPickerHex>>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+
+    let clicked = trigger.entity;
+    let swatch_target = if swatch_query.contains(clicked) {
+        Some(clicked)
+    } else {
+        parents_query
+            .iter_ancestors(clicked)
+            .find(|&e| swatch_query.contains(e))
+    };
+
+    let Some(swatch_entity) = swatch_target else {
+        return;
+    };
+    let Ok(swatch) = swatch_query.get(swatch_entity) else {
+        return;
+    };
+
+    let picked_color = swatch.color;
+    let picked_hex = swatch.hex.clone();
+
+    // Find parent LumaColorPicker
+    let picker_target = parents_query
+        .iter_ancestors(swatch_entity)
+        .find(|&e| picker_query.contains(e));
+    let Some(picker_entity) = picker_target else {
+        return;
+    };
+
+    let Ok((entity, mut picker, children)) = picker_query.get_mut(picker_entity) else {
+        return;
+    };
+
+    picker.current_color = picked_color;
+    picker.current_hex = picked_hex.clone();
+
+    // Update preview tile and hex text
+    for child in children.iter() {
+        if let Ok(mut node) = preview_query.get_mut(child) {
+            node.background_color = picked_color;
+        }
+
+        if let Ok(sub_children) = children_query.get(child) {
+            for sub in sub_children.iter() {
+                if let Ok(mut node) = preview_query.get_mut(sub) {
+                    node.background_color = picked_color;
+                }
+                if let Ok(mut text) = hex_text_query.get_mut(sub) {
+                    text.text = picked_hex.clone();
+                }
+            }
+        }
+    }
+
+    commands.trigger(ColorPickerChanged {
+        entity,
+        color: picked_color,
+        hex: picked_hex,
+    });
+}
+
+/// Plugin registering interactive control widget systems and observers.
+pub struct LumaControlsPlugin;
+
+impl Plugin for LumaControlsPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<LumaColorPicker>()
+            .register_type::<LumaColorPickerPreview>()
+            .register_type::<LumaColorPickerHex>()
+            .register_type::<LumaColorPickerSwatch>()
+            .add_observer(on_color_picker_swatch_click);
     }
 }
 

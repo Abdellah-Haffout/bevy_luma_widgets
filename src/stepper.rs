@@ -44,11 +44,11 @@ pub struct StepperChanged {
     pub value: f64,
 }
 
-const STEPPER_BG: Color = Color::srgb(0.12, 0.15, 0.20);
-const STEPPER_BORDER: Color = Color::srgb(0.22, 0.26, 0.36);
-const BTN_BG_NORMAL: Color = Color::srgba(1.0, 1.0, 1.0, 0.05);
-const BTN_BG_HOVER: Color = Color::srgba(1.0, 1.0, 1.0, 0.12);
-const BTN_BG_PRESSED: Color = Color::srgba(1.0, 1.0, 1.0, 0.20);
+const STEPPER_BG: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
+const STEPPER_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
+const BTN_BG_NORMAL: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
+const BTN_BG_HOVER: Color = Color::srgb_u8(0x24, 0x24, 0x28);
+const BTN_BG_PRESSED: Color = Color::srgb_u8(0x2C, 0x2C, 0x31);
 
 fn format_value(value: f64, step: f64) -> String {
     if step.fract() == 0.0 && value.fract() == 0.0 {

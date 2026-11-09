@@ -33,6 +33,14 @@ impl Default for LumaDrawer {
     }
 }
 
+/// Marker component for the drawer close button.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaDrawerClose;
+
+/// Marker component for the inner drawer content panel.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaDrawerPanel;
+
 /// Event triggered to close a drawer.
 #[derive(Event, Clone, Copy, Debug)]
 pub struct CloseDrawer(pub Entity);
@@ -172,6 +180,16 @@ impl Scene for Drawer {
                 height: UVal::Percent(1.0),
                 background_color: backdrop_color,
             }
+            USelf {
+                position_type: UPositionType::Absolute,
+                left: UVal::Px(0.0),
+                right: UVal::Px(0.0),
+                top: UVal::Px(0.0),
+                bottom: UVal::Px(0.0),
+                ..USelf::default()
+            }
+            UZIndex::Global(90)
+            UInteraction::default()
             ULayout {
                 display: { if is_open { UDisplay::Flex } else { UDisplay::None } },
                 flex_direction: UFlexDirection::Row,
@@ -186,11 +204,14 @@ impl Scene for Drawer {
                     border_radius: UCornerRadius::all(radius),
                     padding,
                 }
+                LumaDrawerPanel
+                UInteraction::default()
                 UBorder {
                     color: border_color,
                     width: border_width,
                     radius: UCornerRadius::all(radius),
                 }
+                UShadow::drop(Color::srgba(0.0, 0.0, 0.0, 0.5), Vec2::new(0.0, 8.0), 24.0)
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Column,
@@ -212,7 +233,18 @@ impl Scene for Drawer {
                             color: Color::WHITE,
                         }
                         --
+                        UNode {
+                            padding: USides::all(6.0),
+                            border_radius: UCornerRadius::all(6.0),
+                            background_color: Color::NONE,
+                        }
+                        LumaDrawerClose
                         UInteraction::default()
+                        UInteractionColors {
+                            normal: Color::NONE,
+                            hovered: Color::srgba(1.0, 1.0, 1.0, 0.08),
+                            pressed: Color::srgba(1.0, 1.0, 1.0, 0.16),
+                        }
                         Children [
                             UText {
                                 text: { Icon::X.to_string() },
@@ -235,17 +267,54 @@ pub fn luma_drawer(placement: DrawerPlacement) -> Drawer {
     Drawer::new(placement)
 }
 
-fn drawer_backdrop_click_observer(
+fn on_drawer_click(
     trigger: On<PointerClick>,
-    query: Query<&LumaDrawer>,
     mut commands: Commands,
+    drawer_query: Query<Entity, With<LumaDrawer>>,
+    close_query: Query<Entity, With<LumaDrawerClose>>,
+    parents_query: Query<&ChildOf>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    let entity = trigger.entity;
-    if query.contains(entity) {
-        commands.trigger(CloseDrawer(entity));
+
+    let clicked = trigger.entity;
+
+    // Check if clicked the [x] close button
+    let is_close_btn = close_query.contains(clicked)
+        || parents_query
+            .iter_ancestors(clicked)
+            .any(|e| close_query.contains(e));
+
+    // Find the drawer entity
+    let drawer_target = if drawer_query.contains(clicked) {
+        Some(clicked)
+    } else {
+        parents_query
+            .iter_ancestors(clicked)
+            .find(|&e| drawer_query.contains(e))
+    };
+
+    let Some(drawer_entity) = drawer_target else {
+        return;
+    };
+
+    if is_close_btn {
+        commands.trigger(CloseDrawer(drawer_entity));
+    } else if drawer_query.contains(clicked) {
+        // Direct click on the backdrop (outside the inner panel)
+        commands.trigger(CloseDrawer(drawer_entity));
+    }
+}
+
+fn on_close_drawer_event(
+    trigger: On<CloseDrawer>,
+    mut drawer_query: Query<(&mut LumaDrawer, &mut ULayout)>,
+) {
+    let entity = trigger.event().0;
+    if let Ok((mut drawer, mut layout)) = drawer_query.get_mut(entity) {
+        drawer.is_open = false;
+        layout.display = UDisplay::None;
     }
 }
 
@@ -255,6 +324,9 @@ pub struct LumaDrawerPlugin;
 impl Plugin for LumaDrawerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaDrawer>()
-            .add_observer(drawer_backdrop_click_observer);
+            .register_type::<LumaDrawerClose>()
+            .register_type::<LumaDrawerPanel>()
+            .add_observer(on_drawer_click)
+            .add_observer(on_close_drawer_event);
     }
 }

@@ -1,15 +1,19 @@
 //! Modal dialog overlay with backdrop and action buttons.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
-use bevy_luma::prelude::*;
-
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
+use bevy_luma::prelude::*;
 
 use crate::button::{luma_button, ButtonSize, ButtonVariant};
 
 /// Marker component for the modal backdrop overlay.
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaModal;
+
+/// Marker component for the inner dialog container box of a modal.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaModalDialog;
 
 /// Marker component for the modal confirm action button.
 #[derive(Component, Clone, Debug, Default, Reflect)]
@@ -102,6 +106,7 @@ impl Scene for Modal {
                 height: UVal::Percent(1.0),
                 background_color: Color::srgba(0.0, 0.0, 0.0, 0.65),
             }
+            UInteraction::default()
             ULayout {
                 display: UDisplay::Flex,
                 justify_content: UJustifyContent::Center,
@@ -114,6 +119,8 @@ impl Scene for Modal {
                     border_radius: UCornerRadius::all(14.0),
                     padding: USides::all(24.0),
                 }
+                LumaModalDialog
+                UInteraction::default()
                 UBorder {
                     color: Color::srgb(0.22, 0.26, 0.36),
                     width: 1.0,
@@ -152,11 +159,17 @@ impl Scene for Modal {
                         gap: 10.0,
                     }
                     Children [
+                        UNode::default()
                         LumaModalCancel
-                        @{ luma_button(cancel_label, ButtonVariant::Secondary, ButtonSize::Medium, font.clone()) }
+                        Children [
+                            @{ luma_button(cancel_label, ButtonVariant::Secondary, ButtonSize::Medium, font.clone()) }
+                        ]
                         --
+                        UNode::default()
                         LumaModalConfirm
-                        @{ luma_button(confirm_label, ButtonVariant::Primary, ButtonSize::Medium, font) }
+                        Children [
+                            @{ luma_button(confirm_label, ButtonVariant::Primary, ButtonSize::Medium, font) }
+                        ]
                     ]
                 ]
             ]
@@ -177,4 +190,67 @@ pub fn luma_modal_dialog(
         .cancel_label(cancel_label)
         .confirm_label(confirm_label)
         .font(font)
+}
+
+fn on_modal_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    modal_query: Query<Entity, With<LumaModal>>,
+    confirm_query: Query<Entity, With<LumaModalConfirm>>,
+    cancel_query: Query<Entity, With<LumaModalCancel>>,
+    parents_query: Query<&ChildOf>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+
+    let clicked = trigger.entity;
+
+    // 1. Check if clicked Confirm button
+    let is_confirm = confirm_query.contains(clicked)
+        || parents_query.iter_ancestors(clicked).any(|e| confirm_query.contains(e));
+
+    // 2. Check if clicked Cancel button
+    let is_cancel = cancel_query.contains(clicked)
+        || parents_query.iter_ancestors(clicked).any(|e| cancel_query.contains(e));
+
+    // 3. Find parent modal entity
+    let modal_target = if modal_query.contains(clicked) {
+        Some(clicked)
+    } else {
+        parents_query.iter_ancestors(clicked).find(|&e| modal_query.contains(e))
+    };
+
+    let Some(modal_entity) = modal_target else { return; };
+
+    if is_confirm {
+        commands.trigger(ModalConfirmed(modal_entity));
+        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
+            entity_cmd.despawn();
+        }
+    } else if is_cancel {
+        commands.trigger(ModalCancelled(modal_entity));
+        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
+            entity_cmd.despawn();
+        }
+    } else if modal_query.contains(clicked) {
+        // Direct click on the backdrop (outside dialog)
+        commands.trigger(ModalCancelled(modal_entity));
+        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
+            entity_cmd.despawn();
+        }
+    }
+}
+
+/// Plugin registering modal dialog systems and observers.
+pub struct LumaModalPlugin;
+
+impl Plugin for LumaModalPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<LumaModal>()
+            .register_type::<LumaModalDialog>()
+            .register_type::<LumaModalConfirm>()
+            .register_type::<LumaModalCancel>()
+            .add_observer(on_modal_click);
+    }
 }

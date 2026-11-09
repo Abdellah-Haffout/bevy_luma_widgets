@@ -35,30 +35,30 @@ pub struct WidgetColors {
 impl Default for WidgetColors {
     fn default() -> Self {
         Self {
-            background: Color::srgb(0.06, 0.07, 0.09),
-            surface: Color::srgb(0.11, 0.13, 0.18),
-            surface_hover: Color::srgb(0.15, 0.18, 0.24),
-            surface_border: Color::srgb(0.20, 0.24, 0.32),
+            background: Color::srgb_u8(0x0A, 0x0A, 0x0B),
+            surface: Color::srgb_u8(0x18, 0x18, 0x1B),
+            surface_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+            surface_border: Color::srgb_u8(0x2B, 0x2B, 0x30),
 
-            primary: Color::srgb(0.20, 0.45, 0.90),
-            primary_hover: Color::srgb(0.28, 0.55, 1.00),
-            primary_pressed: Color::srgb(0.14, 0.35, 0.75),
+            primary: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            primary_hover: Color::srgb_u8(0x3D, 0xE2, 0xAC),
+            primary_pressed: Color::srgb_u8(0x17, 0xB8, 0x84),
 
-            secondary: Color::srgb(0.18, 0.20, 0.27),
-            secondary_hover: Color::srgb(0.24, 0.27, 0.36),
-            secondary_pressed: Color::srgb(0.13, 0.15, 0.20),
+            secondary: Color::srgb_u8(0x18, 0x18, 0x1B),
+            secondary_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+            secondary_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
 
-            danger: Color::srgb(0.85, 0.22, 0.28),
-            danger_hover: Color::srgb(0.95, 0.30, 0.36),
-            danger_pressed: Color::srgb(0.70, 0.16, 0.22),
+            danger: Color::srgb_u8(0x3B, 0x12, 0x13),
+            danger_hover: Color::srgb_u8(0x4A, 0x17, 0x18),
+            danger_pressed: Color::srgb_u8(0x30, 0x0E, 0x0F),
 
-            success: Color::srgb(0.16, 0.75, 0.45),
-            warning: Color::srgb(0.95, 0.65, 0.15),
-            info: Color::srgb(0.20, 0.65, 0.95),
+            success: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            warning: Color::srgb_u8(0xFA, 0xCC, 0x15),
+            info: Color::srgb_u8(0x38, 0xBD, 0xF8),
 
-            text_primary: Color::srgb(0.95, 0.96, 0.98),
-            text_muted: Color::srgb(0.60, 0.65, 0.75),
-            text_dim: Color::srgb(0.40, 0.45, 0.55),
+            text_primary: Color::srgb_u8(0xEC, 0xEC, 0xEE),
+            text_muted: Color::srgb_u8(0xA1, 0xA1, 0xAA),
+            text_dim: Color::srgb_u8(0x74, 0x74, 0x7C),
         }
     }
 }
@@ -111,45 +111,45 @@ impl Default for ButtonStyle {
 impl ButtonStyle {
     pub fn primary() -> Self {
         Self {
-            bg_normal: Color::srgb(0.20, 0.45, 0.90),
-            bg_hover: Color::srgb(0.28, 0.55, 1.00),
-            bg_pressed: Color::srgb(0.14, 0.35, 0.75),
-            border_color: Color::srgb(0.30, 0.55, 1.00),
+            bg_normal: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            bg_hover: Color::srgb_u8(0x3D, 0xE2, 0xAC),
+            bg_pressed: Color::srgb_u8(0x17, 0xB8, 0x84),
+            border_color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
             border_width: 1.0,
-            text_color: Color::WHITE,
+            text_color: Color::srgb_u8(0x06, 0x22, 0x18),
             radius: 8.0,
-            padding: USides::axes(16.0, 9.0),
-            min_height: 38.0,
+            padding: USides::axes(14.0, 8.0),
+            min_height: 34.0,
             font_size: 14.0,
         }
     }
 
     pub fn secondary() -> Self {
         Self {
-            bg_normal: Color::srgb(0.18, 0.20, 0.27),
-            bg_hover: Color::srgb(0.24, 0.27, 0.36),
-            bg_pressed: Color::srgb(0.13, 0.15, 0.20),
-            border_color: Color::srgb(0.25, 0.28, 0.38),
+            bg_normal: Color::srgb_u8(0x18, 0x18, 0x1B),
+            bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+            bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
             border_width: 1.0,
-            text_color: Color::srgb(0.95, 0.96, 0.98),
+            text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             radius: 8.0,
-            padding: USides::axes(16.0, 9.0),
-            min_height: 38.0,
+            padding: USides::axes(14.0, 8.0),
+            min_height: 34.0,
             font_size: 14.0,
         }
     }
 
     pub fn outline() -> Self {
         Self {
-            bg_normal: Color::NONE,
-            bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.08),
-            bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.14),
-            border_color: Color::srgb(0.35, 0.40, 0.52),
+            bg_normal: Color::srgb_u8(0x12, 0x12, 0x14),
+            bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+            bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
             border_width: 1.0,
-            text_color: Color::srgb(0.90, 0.92, 0.96),
+            text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             radius: 8.0,
-            padding: USides::axes(16.0, 9.0),
-            min_height: 38.0,
+            padding: USides::axes(14.0, 8.0),
+            min_height: 34.0,
             font_size: 14.0,
         }
     }
@@ -157,41 +157,41 @@ impl ButtonStyle {
     pub fn ghost() -> Self {
         Self {
             bg_normal: Color::NONE,
-            bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.08),
-            bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.14),
+            bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.06),
+            bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.12),
             border_color: Color::NONE,
             border_width: 0.0,
-            text_color: Color::srgb(0.90, 0.92, 0.96),
+            text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             radius: 8.0,
-            padding: USides::axes(16.0, 9.0),
-            min_height: 38.0,
+            padding: USides::axes(14.0, 8.0),
+            min_height: 34.0,
             font_size: 14.0,
         }
     }
 
     pub fn danger() -> Self {
         Self {
-            bg_normal: Color::srgb(0.85, 0.22, 0.28),
-            bg_hover: Color::srgb(0.95, 0.30, 0.36),
-            bg_pressed: Color::srgb(0.70, 0.16, 0.22),
-            border_color: Color::srgb(0.95, 0.35, 0.40),
+            bg_normal: Color::srgb_u8(0x3B, 0x12, 0x13),
+            bg_hover: Color::srgb_u8(0x4A, 0x17, 0x18),
+            bg_pressed: Color::srgb_u8(0x30, 0x0E, 0x0F),
+            border_color: Color::srgb_u8(0x52, 0x1C, 0x1D),
             border_width: 1.0,
-            text_color: Color::WHITE,
+            text_color: Color::srgb_u8(0xF4, 0x6B, 0x6B),
             radius: 8.0,
-            padding: USides::axes(16.0, 9.0),
-            min_height: 38.0,
+            padding: USides::axes(14.0, 8.0),
+            min_height: 34.0,
             font_size: 14.0,
         }
     }
 
     pub fn fab() -> Self {
         Self {
-            bg_normal: Color::srgb(0.20, 0.45, 0.90),
-            bg_hover: Color::srgb(0.28, 0.55, 1.00),
-            bg_pressed: Color::srgb(0.14, 0.35, 0.75),
-            border_color: Color::srgb(0.35, 0.60, 1.00),
+            bg_normal: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            bg_hover: Color::srgb_u8(0x3D, 0xE2, 0xAC),
+            bg_pressed: Color::srgb_u8(0x17, 0xB8, 0x84),
+            border_color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
             border_width: 1.5,
-            text_color: Color::WHITE,
+            text_color: Color::srgb_u8(0x06, 0x22, 0x18),
             radius: 28.0,
             padding: USides::all(0.0),
             min_height: 56.0,
@@ -201,16 +201,16 @@ impl ButtonStyle {
 
     pub fn icon() -> Self {
         Self {
-            bg_normal: Color::srgb(0.18, 0.20, 0.27),
-            bg_hover: Color::srgb(0.24, 0.27, 0.36),
-            bg_pressed: Color::srgb(0.13, 0.15, 0.20),
-            border_color: Color::srgb(0.25, 0.28, 0.38),
+            bg_normal: Color::srgb_u8(0x18, 0x18, 0x1B),
+            bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+            bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
             border_width: 1.0,
-            text_color: Color::srgb(0.95, 0.96, 0.98),
+            text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             radius: 8.0,
             padding: USides::all(0.0),
-            min_height: 38.0,
-            font_size: 16.0,
+            min_height: 34.0,
+            font_size: 15.0,
         }
     }
 
@@ -246,11 +246,11 @@ pub struct ToggleStyle {
 impl Default for ToggleStyle {
     fn default() -> Self {
         Self {
-            checked_bg: Color::srgb(0.20, 0.45, 0.90),
-            unchecked_bg: Color::srgb(0.18, 0.22, 0.28),
-            checked_border: Color::srgb(0.28, 0.55, 1.00),
-            unchecked_border: Color::srgb(0.28, 0.32, 0.40),
-            knob_color: Color::WHITE,
+            checked_bg: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            unchecked_bg: Color::srgb_u8(0x18, 0x18, 0x1B),
+            checked_border: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            unchecked_border: Color::srgb_u8(0x2B, 0x2B, 0x30),
+            knob_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             track_width: 44.0,
             track_height: 24.0,
             knob_size: 20.0,
@@ -272,8 +272,8 @@ pub struct CardStyle {
 impl Default for CardStyle {
     fn default() -> Self {
         Self {
-            bg_color: Color::srgb(0.11, 0.13, 0.18),
-            border_color: Color::srgb(0.20, 0.24, 0.32),
+            bg_color: Color::srgb_u8(0x18, 0x18, 0x1B),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
             border_width: 1.0,
             radius: 12.0,
             padding: 16.0,
@@ -289,7 +289,7 @@ impl CardStyle {
     pub fn outlined() -> Self {
         Self {
             bg_color: Color::NONE,
-            border_color: Color::srgb(0.24, 0.28, 0.38),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
             border_width: 1.5,
             radius: 12.0,
             padding: 16.0,
@@ -298,7 +298,7 @@ impl CardStyle {
 
     pub fn flat() -> Self {
         Self {
-            bg_color: Color::srgb(0.09, 0.10, 0.14),
+            bg_color: Color::srgb_u8(0x12, 0x12, 0x14),
             border_color: Color::NONE,
             border_width: 0.0,
             radius: 8.0,
@@ -308,8 +308,8 @@ impl CardStyle {
 
     pub fn interactive() -> Self {
         Self {
-            bg_color: Color::srgb(0.12, 0.14, 0.20),
-            border_color: Color::srgb(0.28, 0.45, 0.85),
+            bg_color: Color::srgb_u8(0x18, 0x18, 0x1B),
+            border_color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
             border_width: 1.0,
             radius: 12.0,
             padding: 16.0,
@@ -416,10 +416,10 @@ pub struct SliderStyle {
 impl Default for SliderStyle {
     fn default() -> Self {
         Self {
-            track_bg: Color::srgb(0.18, 0.22, 0.28),
-            fill_color: Color::srgb(0.20, 0.45, 0.90),
-            thumb_color: Color::WHITE,
-            thumb_border: Color::srgb(0.28, 0.55, 1.00),
+            track_bg: Color::srgb_u8(0x18, 0x18, 0x1B),
+            fill_color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            thumb_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
+            thumb_border: Color::srgb_u8(0x1F, 0xD6, 0x9A),
             track_height: 6.0,
             thumb_size: 16.0,
         }
@@ -447,17 +447,17 @@ pub struct DragValueStyle {
 impl Default for DragValueStyle {
     fn default() -> Self {
         Self {
-            bg_normal: Color::srgb(0.14, 0.15, 0.18),
-            bg_hover: Color::srgb(0.18, 0.20, 0.25),
-            bg_active: Color::srgb(0.12, 0.14, 0.18),
-            border_color: Color::srgb(0.22, 0.25, 0.30),
-            border_hover: Color::srgb(0.32, 0.38, 0.48),
-            border_active: Color::srgb(0.35, 0.65, 1.00),
+            bg_normal: Color::srgb_u8(0x12, 0x12, 0x14),
+            bg_hover: Color::srgb_u8(0x18, 0x18, 0x1B),
+            bg_active: Color::srgb_u8(0x12, 0x12, 0x14),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
+            border_hover: Color::srgb_u8(0x3F, 0x3F, 0x46),
+            border_active: Color::srgb_u8(0x1F, 0xD6, 0x9A),
             border_width: 1.0,
-            text_color: Color::srgb(0.92, 0.94, 0.98),
-            accent_color: Color::srgb(0.50, 0.55, 0.65),
-            fill_color: Color::srgba(0.28, 0.45, 0.70, 0.35),
-            radius: 5.0,
+            text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
+            accent_color: Color::srgb_u8(0x74, 0x74, 0x7C),
+            fill_color: Color::srgba(0.12, 0.84, 0.60, 0.25),
+            radius: 6.0,
             height: 28.0,
             font_size: 13.0,
         }
@@ -491,18 +491,18 @@ impl Default for InputStyle {
 impl InputStyle {
     pub fn normal() -> Self {
         Self {
-            bg_normal: Color::srgb(0.10, 0.12, 0.16),
-            bg_focus: Color::srgb(0.12, 0.14, 0.20),
-            border_normal: Color::srgb(0.20, 0.24, 0.32),
-            border_focus: Color::srgb(0.35, 0.65, 1.00),
-            border_error: Color::srgb(0.85, 0.22, 0.28),
-            border_success: Color::srgb(0.16, 0.75, 0.45),
+            bg_normal: Color::srgb_u8(0x12, 0x12, 0x14),
+            bg_focus: Color::srgb_u8(0x18, 0x18, 0x1B),
+            border_normal: Color::srgb_u8(0x2B, 0x2B, 0x30),
+            border_focus: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            border_error: Color::srgb_u8(0xF4, 0x6B, 0x6B),
+            border_success: Color::srgb_u8(0x1F, 0xD6, 0x9A),
             border_width: 1.0,
-            text_color: Color::srgb(0.95, 0.96, 0.98),
-            placeholder_color: Color::srgb(0.45, 0.50, 0.62),
+            text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
+            placeholder_color: Color::srgb_u8(0x74, 0x74, 0x7C),
             radius: 8.0,
-            padding: USides::axes(14.0, 9.0),
-            min_height: 38.0,
+            padding: USides::axes(12.0, 8.0),
+            min_height: 34.0,
             font_size: 14.0,
         }
     }
@@ -554,8 +554,8 @@ impl Default for SpinnerStyle {
 impl SpinnerStyle {
     pub fn sm() -> Self {
         Self {
-            color: Color::srgb(0.35, 0.65, 1.00),
-            track_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
+            color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            track_color: Color::srgba(1.0, 1.0, 1.0, 0.12),
             size: 16.0,
             thickness: 2.0,
             speed: 6.0,
@@ -564,8 +564,8 @@ impl SpinnerStyle {
 
     pub fn md() -> Self {
         Self {
-            color: Color::srgb(0.35, 0.65, 1.00),
-            track_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
+            color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            track_color: Color::srgba(1.0, 1.0, 1.0, 0.12),
             size: 24.0,
             thickness: 3.0,
             speed: 6.0,
@@ -574,8 +574,8 @@ impl SpinnerStyle {
 
     pub fn lg() -> Self {
         Self {
-            color: Color::srgb(0.35, 0.65, 1.00),
-            track_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
+            color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
+            track_color: Color::srgba(1.0, 1.0, 1.0, 0.12),
             size: 36.0,
             thickness: 4.0,
             speed: 6.0,
@@ -604,15 +604,15 @@ impl Default for ListItemStyle {
     fn default() -> Self {
         Self {
             bg_normal: Color::NONE,
-            bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.05),
-            bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.09),
+            bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+            bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
             border_color: Color::NONE,
             border_width: 0.0,
-            title_color: Color::srgb(0.95, 0.96, 0.98),
-            subtitle_color: Color::srgb(0.60, 0.65, 0.75),
+            title_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
+            subtitle_color: Color::srgb_u8(0x74, 0x74, 0x7C),
             radius: 8.0,
             padding: USides::axes(12.0, 8.0),
-            min_height: 44.0,
+            min_height: 40.0,
             font_size: 14.0,
             subtitle_font_size: 12.0,
         }
@@ -639,18 +639,18 @@ pub struct SelectStyle {
 impl Default for SelectStyle {
     fn default() -> Self {
         Self {
-            bg_color: Color::srgb(0.10, 0.12, 0.16),
-            bg_hover: Color::srgb(0.14, 0.17, 0.23),
-            border_color: Color::srgb(0.20, 0.24, 0.32),
-            border_focus: Color::srgb(0.35, 0.65, 1.00),
+            bg_color: Color::srgb_u8(0x18, 0x18, 0x1B),
+            bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
+            border_focus: Color::srgb_u8(0x1F, 0xD6, 0x9A),
             border_width: 1.0,
-            text_color: Color::srgb(0.95, 0.96, 0.98),
+            text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
             radius: 8.0,
-            padding: USides::axes(14.0, 9.0),
-            min_height: 38.0,
+            padding: USides::axes(12.0, 8.0),
+            min_height: 34.0,
             font_size: 14.0,
-            menu_bg: Color::srgb(0.11, 0.13, 0.18),
-            menu_border: Color::srgb(0.22, 0.26, 0.36),
+            menu_bg: Color::srgb_u8(0x18, 0x18, 0x1B),
+            menu_border: Color::srgb_u8(0x2B, 0x2B, 0x30),
         }
     }
 }
@@ -669,10 +669,10 @@ pub struct DrawerStyle {
 impl Default for DrawerStyle {
     fn default() -> Self {
         Self {
-            bg_color: Color::srgb(0.10, 0.12, 0.17),
-            border_color: Color::srgb(0.20, 0.24, 0.34),
+            bg_color: Color::srgb_u8(0x18, 0x18, 0x1B),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
             border_width: 1.0,
-            backdrop_color: Color::srgba(0.0, 0.0, 0.0, 0.6),
+            backdrop_color: Color::srgba(0.0, 0.0, 0.0, 0.65),
             radius: 12.0,
             padding: USides::all(20.0),
         }
@@ -692,8 +692,8 @@ pub struct PopoverStyle {
 impl Default for PopoverStyle {
     fn default() -> Self {
         Self {
-            bg_color: Color::srgb(0.12, 0.14, 0.20),
-            border_color: Color::srgb(0.24, 0.28, 0.38),
+            bg_color: Color::srgb_u8(0x18, 0x18, 0x1B),
+            border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
             border_width: 1.0,
             radius: 10.0,
             padding: USides::all(12.0),
@@ -845,5 +845,87 @@ pub fn luma_style_scope(scope: LumaStyleScope, children: impl Scene) -> impl Sce
         Children [
             @{children}
         ]
+    }
+}
+
+pub fn apply_luma_style_scope_to_buttons(
+    parents_query: Query<&ChildOf>,
+    scopes_query: Query<&LumaStyleScope>,
+    mut button_query: Query<
+        (Entity, &crate::button::LumaButton, &mut UNode, &mut UBorder, &mut UInteractionColors),
+        Added<crate::button::LumaButton>,
+    >,
+) {
+    for (entity, button, mut node, mut border, mut colors) in button_query.iter_mut() {
+        if button.has_explicit_style {
+            continue;
+        }
+
+        let scope_entity = parents_query
+            .iter_ancestors(entity)
+            .find(|&e| scopes_query.contains(e));
+        let Some(scope_entity) = scope_entity else {
+            continue;
+        };
+        let Ok(scope) = scopes_query.get(scope_entity) else {
+            continue;
+        };
+
+        if let Some(ref style) = scope.button {
+            node.border_radius = UCornerRadius::all(style.radius);
+            border.radius = UCornerRadius::all(style.radius);
+            border.width = style.border_width;
+
+            if button.variant == crate::button::ButtonVariant::Primary {
+                node.background_color = style.bg_normal;
+                border.color = style.border_color;
+                colors.normal = style.bg_normal;
+                colors.hovered = style.bg_hover;
+                colors.pressed = style.bg_pressed;
+            }
+        }
+    }
+}
+
+pub fn apply_luma_style_scope_to_cards(
+    parents_query: Query<&ChildOf>,
+    scopes_query: Query<&LumaStyleScope>,
+    mut card_query: Query<(Entity, &mut UNode, &mut UBorder), Added<crate::card::LumaCard>>,
+) {
+    for (entity, mut node, mut border) in card_query.iter_mut() {
+        let scope_entity = parents_query
+            .iter_ancestors(entity)
+            .find(|&e| scopes_query.contains(e));
+        let Some(scope_entity) = scope_entity else {
+            continue;
+        };
+        let Ok(scope) = scopes_query.get(scope_entity) else {
+            continue;
+        };
+
+        if let Some(ref style) = scope.card {
+            node.background_color = style.bg_color;
+            node.border_radius = UCornerRadius::all(style.radius);
+            border.color = style.border_color;
+            border.width = style.border_width;
+            border.radius = UCornerRadius::all(style.radius);
+        }
+    }
+}
+
+/// Plugin registering style scopes and default themes.
+pub struct LumaThemePlugin;
+
+impl Plugin for LumaThemePlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<LumaStyleScope>()
+            .register_type::<LumaWidgetTheme>()
+            .add_systems(
+                Update,
+                (
+                    apply_luma_style_scope_to_buttons,
+                    apply_luma_style_scope_to_cards,
+                ),
+            );
     }
 }

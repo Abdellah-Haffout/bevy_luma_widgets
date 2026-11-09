@@ -40,6 +40,7 @@ pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
 pub mod button;
+pub mod button_group;
 pub mod card;
 pub mod checkbox;
 pub mod chip;
@@ -76,7 +77,7 @@ pub mod prelude {
     pub use bevy_luma::prelude::*;
 
     pub use crate::{
-        accordion::*, alert::*, avatar::*, badge::*, breadcrumb::*, button::*, card::*, cards::*,
+        accordion::*, alert::*, avatar::*, badge::*, breadcrumb::*, button::*, button_group::*, card::*, cards::*,
         checkbox::*, chip::*, controls::*, data_views::*, divider::*, drag_value::*, drawer::*,
         input::*, kbd::*, list_item::*, modal::*, navigation::*, popover::*, progress::*, radio::*,
         rating::*, segmented_control::*, select::*, skeleton::*, slider::*, spinner::*, stat::*,
@@ -124,6 +125,13 @@ impl Plugin for LumaWidgetsPlugin {
                 drawer::LumaDrawerPlugin,
                 popover::LumaPopoverPlugin,
                 drag_value::LumaDragValuePlugin,
+                modal::LumaModalPlugin,
+                tooltip::LumaTooltipPlugin,
+                theme::LumaThemePlugin,
+                input::LumaInputPlugin,
+                controls::LumaControlsPlugin,
+                navigation::LumaNavigationPlugin,
+                button_group::LumaButtonGroupPlugin,
             ));
     }
 }

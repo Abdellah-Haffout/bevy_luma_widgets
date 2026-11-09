@@ -1,10 +1,20 @@
 //! Dropdown selection menu widget.
+//!
+//! Features:
+//! - Trigger box displaying the current selection or placeholder, with chevron indicator.
+//! - Floating popover overlay window rendered in an independent [`URootUi::screen`] at `UZIndex::Global(9999)`.
+//! - Never pushes or shifts sibling layout elements (zero layout shift).
+//! - Immune to parent container clipping (`UClip` / `overflow: hidden`).
+//! - Fullscreen dismiss barrier / backdrop to seamlessly close on outside clicks.
+//! - Keyboard navigation (closes on `Escape`).
+//! - Auto-flipping: opens upward if near the bottom edge of the screen.
 
 use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
+use crate::navigation::SceneList;
 use crate::theme::SelectStyle;
 
 /// Single option entry in a Select menu.
@@ -29,6 +39,11 @@ pub struct LumaSelect {
     pub is_open: bool,
     pub selected_index: Option<usize>,
     pub disabled: bool,
+    pub placeholder: String,
+    pub options: Vec<SelectOption>,
+    pub style: SelectStyle,
+    #[reflect(ignore)]
+    pub overlay_entity: Option<Entity>,
 }
 
 impl Default for LumaSelect {
@@ -37,6 +52,74 @@ impl Default for LumaSelect {
             is_open: false,
             selected_index: None,
             disabled: false,
+            placeholder: "Select an option...".to_string(),
+            options: Vec::new(),
+            style: SelectStyle::default(),
+            overlay_entity: None,
+        }
+    }
+}
+
+/// Marker for the clickable trigger header of a Select dropdown.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaSelectTrigger;
+
+/// Marker for the display text element inside a Select dropdown.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaSelectText;
+
+/// Marker for the directional chevron icon inside a Select dropdown.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaSelectChevron;
+
+/// Marker for the expandable options menu container inside the floating overlay.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaSelectMenu;
+
+/// Root marker attached to the independent floating overlay window.
+#[derive(Component, Clone, Debug, Reflect)]
+pub struct LumaSelectOverlay {
+    pub select_entity: Entity,
+}
+
+impl Default for LumaSelectOverlay {
+    fn default() -> Self {
+        Self {
+            select_entity: Entity::PLACEHOLDER,
+        }
+    }
+}
+
+/// Fullscreen transparent barrier backdrop capturing outside clicks to dismiss the menu.
+#[derive(Component, Clone, Debug, Reflect)]
+pub struct LumaSelectBackdrop {
+    pub select_entity: Entity,
+}
+
+impl Default for LumaSelectBackdrop {
+    fn default() -> Self {
+        Self {
+            select_entity: Entity::PLACEHOLDER,
+        }
+    }
+}
+
+/// Component attached to each option item row inside a Select dropdown menu.
+#[derive(Component, Clone, Debug, Reflect)]
+pub struct LumaSelectOptionItem {
+    pub select_entity: Entity,
+    pub index: usize,
+    pub value: String,
+    pub label: String,
+}
+
+impl Default for LumaSelectOptionItem {
+    fn default() -> Self {
+        Self {
+            select_entity: Entity::PLACEHOLDER,
+            index: 0,
+            value: String::new(),
+            label: String::new(),
         }
     }
 }
@@ -147,14 +230,21 @@ impl Scene for Select {
 
         let selected_index = self.selected_index;
         let disabled = self.disabled;
-        let font = self.font;
-        let icon_font = self.icon_font;
+        let font = self.font.clone();
+        let icon_font = self.icon_font.clone();
+        let placeholder = self.placeholder.clone();
+        let options = self.options.clone();
+        let select_style = style.clone();
 
         let s = bsn! {
             LumaSelect {
                 is_open: false,
                 selected_index,
                 disabled,
+                placeholder,
+                options,
+                style: select_style,
+                overlay_entity: None,
             }
             UNode {
                 width: UVal::Percent(1.0),
@@ -163,6 +253,7 @@ impl Scene for Select {
                 border_radius: UCornerRadius::all(radius),
                 padding,
             }
+            LumaSelectTrigger
             UBorder {
                 color: border_color,
                 width: border_width,
@@ -185,6 +276,7 @@ impl Scene for Select {
             Children [
                 UNode::default()
                 Children [
+                    LumaSelectText
                     UText {
                         text: display_text,
                         font_size,
@@ -195,6 +287,7 @@ impl Scene for Select {
                 --
                 UNode::default()
                 Children [
+                    LumaSelectChevron
                     UText {
                         text: { Icon::CHEVRON_DOWN.to_string() },
                         font_size: 14.0,
@@ -214,17 +307,573 @@ pub fn luma_select(placeholder: impl Into<String>, options: Vec<SelectOption>) -
     Select::new(placeholder, options)
 }
 
-fn select_click_observer(
+/// Dedicated scene for the floating dropdown overlay window.
+struct SelectOverlayScene {
+    select_entity: Entity,
+    menu_left: f32,
+    menu_top: f32,
+    menu_width: f32,
+    menu_height: f32,
+    item_height: f32,
+    item_gap: f32,
+    style: SelectStyle,
+    options: Vec<SelectOption>,
+    selected_index: Option<usize>,
+    font: Handle<Font>,
+}
+
+impl Scene for SelectOverlayScene {
+    fn resolve(
+        self,
+        context: &mut ResolveContext,
+        scene: &mut ResolvedScene,
+    ) -> Result<(), ResolveSceneError> {
+        let select_entity = self.select_entity;
+        let style = self.style;
+        let menu_left = self.menu_left;
+        let menu_top = self.menu_top;
+        let menu_width = self.menu_width;
+        let menu_height = self.menu_height;
+        let item_height = self.item_height;
+        let item_gap = self.item_gap;
+        let radius = style.radius;
+        let menu_bg = style.menu_bg;
+        let menu_border = style.menu_border;
+        let selected_index = self.selected_index;
+
+        let option_rows: Vec<_> = self
+            .options
+            .into_iter()
+            .enumerate()
+            .map(|(idx, opt)| {
+                let is_sel = selected_index == Some(idx);
+                let item_bg = if is_sel {
+                    Color::srgba(0.12, 0.84, 0.60, 0.18)
+                } else {
+                    Color::NONE
+                };
+                let item_color = if is_sel {
+                    style.border_focus
+                } else {
+                    style.text_color
+                };
+                let opt_label = opt.label;
+                let opt_label_clone = opt_label.clone();
+                let opt_value = opt.value;
+                let f = self.font.clone();
+                let opt_font_size = style.font_size - 1.0;
+
+                bsn! {
+                    UNode {
+                        width: UVal::Percent(1.0),
+                        height: UVal::Px(item_height),
+                        padding: USides::axes(12.0, 8.0),
+                        border_radius: UCornerRadius::all(6.0),
+                        background_color: item_bg,
+                    }
+                    LumaSelectOptionItem {
+                        select_entity,
+                        index: idx,
+                        value: opt_value,
+                        label: opt_label_clone,
+                    }
+                    UInteraction::default()
+                    UInteractionColors {
+                        normal: item_bg,
+                        hovered: Color::srgba(1.0, 1.0, 1.0, 0.08),
+                        pressed: Color::srgba(1.0, 1.0, 1.0, 0.14),
+                    }
+                    ULayout {
+                        display: UDisplay::Flex,
+                        flex_direction: UFlexDirection::Row,
+                        align_items: UAlignItems::Center,
+                        justify_content: UJustifyContent::SpaceBetween,
+                    }
+                    Children [
+                        UText {
+                            text: opt_label,
+                            font_size: opt_font_size,
+                            font: f,
+                            color: item_color,
+                        }
+                    ]
+                }
+            })
+            .collect();
+
+        let options_scene = SceneList::new(option_rows);
+
+        let s = bsn! {
+            URootUi::screen()
+            UZIndex::Global(9999)
+            LumaSelectOverlay {
+                select_entity,
+            }
+            // Fullscreen invisible barrier backdrop to capture outside clicks
+            UNode {
+                width: UVal::Percent(1.0),
+                height: UVal::Percent(1.0),
+                background_color: Color::NONE,
+            }
+            LumaSelectBackdrop {
+                select_entity,
+            }
+            UInteraction::default()
+            ULayout {
+                display: UDisplay::Flex,
+            }
+            Children [
+                // Floating Menu Card
+                UNode {
+                    width: UVal::Px(menu_width),
+                    height: UVal::Auto,
+                    max_height: menu_height,
+                    background_color: menu_bg,
+                    border_radius: UCornerRadius::all(radius),
+                    padding: USides::all(4.0),
+                }
+                USelf {
+                    position_type: UPositionType::Absolute,
+                    left: UVal::Px(menu_left),
+                    top: UVal::Px(menu_top),
+                    ..USelf::default()
+                }
+                UBorder {
+                    color: menu_border,
+                    width: 1.0,
+                    radius: UCornerRadius::all(radius),
+                }
+                UShadow::drop(Color::srgba(0.0, 0.0, 0.0, 0.65), Vec2::new(0.0, 8.0), 16.0)
+                LumaSelectMenu
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Column,
+                    gap: item_gap,
+                }
+                Children [
+                    @{options_scene}
+                ]
+            ]
+        };
+
+        s.resolve(context, scene)
+    }
+}
+
+fn toggle_select(
+    trigger_entity: Entity,
+    commands: &mut Commands,
+    theme: &Theme,
+    windows: &Query<&Window>,
+    cameras: &Query<(&Camera, &GlobalTransform)>,
+    parents_query: &Query<&ChildOf>,
+    trigger_transform_query: &Query<(&GlobalTransform, &ComputedSize)>,
+    select_query: &mut Query<(Entity, &mut LumaSelect, &Children)>,
+    chevron_query: &mut Query<&mut UText, With<LumaSelectChevron>>,
+    children_query: &Query<&Children>,
+) {
+    let select_target = if select_query.contains(trigger_entity) {
+        Some(trigger_entity)
+    } else {
+        parents_query
+            .iter_ancestors(trigger_entity)
+            .find(|&e| select_query.contains(e))
+    };
+
+    let Some(select_entity) = select_target else {
+        return;
+    };
+
+    let Ok((_, mut select, children)) = select_query.get_mut(select_entity) else {
+        return;
+    };
+    if select.disabled {
+        return;
+    }
+
+    if select.is_open {
+        select.is_open = false;
+        if let Some(overlay) = select.overlay_entity.take() {
+            commands.entity(overlay).despawn();
+        }
+        for child in children.iter() {
+            if let Ok(mut text) = chevron_query.get_mut(child) {
+                text.text = Icon::CHEVRON_DOWN.to_string();
+            }
+            if let Ok(sub_children) = children_query.get(child) {
+                for sub in sub_children.iter() {
+                    if let Ok(mut text) = chevron_query.get_mut(sub) {
+                        text.text = Icon::CHEVRON_DOWN.to_string();
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // Close any other open select menus first
+    for (other_entity, mut other_select, other_children) in select_query.iter_mut() {
+        if other_entity != select_entity && other_select.is_open {
+            other_select.is_open = false;
+            if let Some(overlay) = other_select.overlay_entity.take() {
+                commands.entity(overlay).despawn();
+            }
+            for child in other_children.iter() {
+                if let Ok(mut text) = chevron_query.get_mut(child) {
+                    text.text = Icon::CHEVRON_DOWN.to_string();
+                }
+                if let Ok(sub_children) = children_query.get(child) {
+                    for sub in sub_children.iter() {
+                        if let Ok(mut text) = chevron_query.get_mut(sub) {
+                            text.text = Icon::CHEVRON_DOWN.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Re-fetch after the loop
+    let Ok((_, mut select, children)) = select_query.get_mut(select_entity) else {
+        return;
+    };
+
+    let window = windows.iter().next();
+    let (win_w, win_h) = window.map(|w| (w.width(), w.height())).unwrap_or((1280.0, 720.0));
+
+    let (trigger_w, trigger_h, screen_x, screen_y) = if let Ok((gt, computed)) =
+        trigger_transform_query.get(select_entity)
+    {
+        let mut screen_pos = Vec2::new(
+            (win_w * 0.5) + gt.translation().x,
+            (win_h * 0.5) - gt.translation().y,
+        );
+        for (cam, cam_gt) in cameras.iter() {
+            if let Ok(viewport_pos) = cam.world_to_viewport(cam_gt, gt.translation()) {
+                screen_pos = viewport_pos;
+                break;
+            }
+        }
+        (computed.width, computed.height, screen_pos.x, screen_pos.y)
+    } else {
+        (200.0, 34.0, win_w * 0.5, win_h * 0.5)
+    };
+
+    let half_w = trigger_w * 0.5;
+    let half_h = trigger_h * 0.5;
+    let trigger_left = screen_x - half_w;
+    let trigger_top = screen_y - half_h;
+    let trigger_bottom = screen_y + half_h;
+
+    let option_count = select.options.len();
+    if option_count == 0 {
+        return;
+    }
+    let item_height = 34.0;
+    let item_gap = 2.0;
+    let menu_padding = 8.0;
+    let menu_height = menu_padding
+        + (option_count as f32) * item_height
+        + ((option_count.saturating_sub(1)) as f32) * item_gap;
+    let menu_width = trigger_w.max(120.0);
+
+    let space_below = win_h - trigger_bottom;
+    let space_above = trigger_top;
+    let place_above = space_below < (menu_height + 8.0) && space_above > space_below;
+    let menu_top = if place_above {
+        (trigger_top - menu_height - 4.0).max(4.0)
+    } else {
+        (trigger_bottom + 4.0).min((win_h - menu_height - 4.0).max(4.0))
+    };
+    let menu_left = trigger_left.clamp(4.0, (win_w - menu_width - 4.0).max(4.0));
+
+    let overlay_scene = SelectOverlayScene {
+        select_entity,
+        menu_left,
+        menu_top,
+        menu_width,
+        menu_height,
+        item_height,
+        item_gap,
+        style: select.style.clone(),
+        options: select.options.clone(),
+        selected_index: select.selected_index,
+        font: theme.text.font.inter_regular.clone(),
+    };
+
+    let overlay_id = commands.spawn_scene(overlay_scene).id();
+    select.overlay_entity = Some(overlay_id);
+    select.is_open = true;
+
+    for child in children.iter() {
+        if let Ok(mut text) = chevron_query.get_mut(child) {
+            text.text = Icon::CHEVRON_UP.to_string();
+        }
+        if let Ok(sub_children) = children_query.get(child) {
+            for sub in sub_children.iter() {
+                if let Ok(mut text) = chevron_query.get_mut(sub) {
+                    text.text = Icon::CHEVRON_UP.to_string();
+                }
+            }
+        }
+    }
+}
+
+fn on_select_trigger_click(
     trigger: On<PointerClick>,
-    mut query: Query<&mut LumaSelect>,
+    mut commands: Commands,
+    theme: Res<Theme>,
+    trigger_query: Query<&LumaSelectTrigger>,
+    parents_query: Query<&ChildOf>,
+    windows: Query<&Window>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    trigger_transform_query: Query<(&GlobalTransform, &ComputedSize)>,
+    mut select_query: Query<(Entity, &mut LumaSelect, &Children)>,
+    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    children_query: Query<&Children>,
 ) {
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    let entity = trigger.entity;
-    if let Ok(mut select) = query.get_mut(entity) {
-        if !select.disabled {
-            select.is_open = !select.is_open;
+
+    let is_trigger = trigger_query.contains(trigger.entity)
+        || parents_query
+            .iter_ancestors(trigger.entity)
+            .any(|e| trigger_query.contains(e));
+
+    if !is_trigger {
+        return;
+    }
+
+    toggle_select(
+        trigger.entity,
+        &mut commands,
+        &theme,
+        &windows,
+        &cameras,
+        &parents_query,
+        &trigger_transform_query,
+        &mut select_query,
+        &mut chevron_query,
+        &children_query,
+    );
+}
+
+fn on_select_trigger_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    theme: Res<Theme>,
+    parents_query: Query<&ChildOf>,
+    windows: Query<&Window>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    trigger_transform_query: Query<(&GlobalTransform, &ComputedSize)>,
+    mut select_query: Query<(Entity, &mut LumaSelect, &Children)>,
+    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    children_query: Query<&Children>,
+) {
+    toggle_select(
+        trigger.entity,
+        &mut commands,
+        &theme,
+        &windows,
+        &cameras,
+        &parents_query,
+        &trigger_transform_query,
+        &mut select_query,
+        &mut chevron_query,
+        &children_query,
+    );
+}
+
+fn on_select_option_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    option_query: Query<&LumaSelectOptionItem>,
+    parents_query: Query<&ChildOf>,
+    mut select_query: Query<(Entity, &mut LumaSelect, &Children)>,
+    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    mut text_query: Query<&mut UText, (With<LumaSelectText>, Without<LumaSelectChevron>)>,
+    children_query: Query<&Children>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+
+    let option_target = if option_query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query
+            .iter_ancestors(trigger.entity)
+            .find(|&e| option_query.contains(e))
+    };
+
+    let Some(opt_entity) = option_target else {
+        return;
+    };
+    let Ok(opt_item) = option_query.get(opt_entity) else {
+        return;
+    };
+
+    let select_entity = opt_item.select_entity;
+    let opt_index = opt_item.index;
+    let opt_value = opt_item.value.clone();
+    let opt_label = opt_item.label.clone();
+
+    let Ok((entity, mut select, children)) = select_query.get_mut(select_entity) else {
+        return;
+    };
+    if select.disabled {
+        return;
+    }
+
+    select.selected_index = Some(opt_index);
+    select.is_open = false;
+    if let Some(overlay) = select.overlay_entity.take() {
+        commands.entity(overlay).despawn();
+    }
+
+    // Update label text and chevron on the trigger
+    for child in children.iter() {
+        if let Ok(mut text) = text_query.get_mut(child) {
+            text.text = opt_label.clone();
+            text.color = select.style.text_color;
+        }
+        if let Ok(mut text) = chevron_query.get_mut(child) {
+            text.text = Icon::CHEVRON_DOWN.to_string();
+        }
+
+        if let Ok(sub_children) = children_query.get(child) {
+            for sub in sub_children.iter() {
+                if let Ok(mut text) = text_query.get_mut(sub) {
+                    text.text = opt_label.clone();
+                    text.color = select.style.text_color;
+                }
+                if let Ok(mut text) = chevron_query.get_mut(sub) {
+                    text.text = Icon::CHEVRON_DOWN.to_string();
+                }
+                if let Ok(grand_children) = children_query.get(sub) {
+                    for grand in grand_children.iter() {
+                        if let Ok(mut text) = text_query.get_mut(grand) {
+                            text.text = opt_label.clone();
+                            text.color = select.style.text_color;
+                        }
+                        if let Ok(mut text) = chevron_query.get_mut(grand) {
+                            text.text = Icon::CHEVRON_DOWN.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    commands.trigger(SelectChanged {
+        entity,
+        selected_index: opt_index,
+        value: opt_value,
+    });
+}
+
+fn on_select_backdrop_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    backdrop_query: Query<&LumaSelectBackdrop>,
+    parents_query: Query<&ChildOf>,
+    menu_query: Query<&LumaSelectMenu>,
+    mut select_query: Query<(&mut LumaSelect, &Children)>,
+    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    children_query: Query<&Children>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+
+    // If the click is inside the menu card (or its children), ignore
+    let is_inside_menu = menu_query.contains(trigger.entity)
+        || parents_query
+            .iter_ancestors(trigger.entity)
+            .any(|e| menu_query.contains(e));
+    if is_inside_menu {
+        return;
+    }
+
+    let backdrop_target = if backdrop_query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query
+            .iter_ancestors(trigger.entity)
+            .find(|&e| backdrop_query.contains(e))
+    };
+
+    let Some(backdrop_entity) = backdrop_target else {
+        return;
+    };
+    let Ok(backdrop) = backdrop_query.get(backdrop_entity) else {
+        return;
+    };
+
+    let select_entity = backdrop.select_entity;
+    let Ok((mut select, children)) = select_query.get_mut(select_entity) else {
+        return;
+    };
+
+    select.is_open = false;
+    if let Some(overlay) = select.overlay_entity.take() {
+        commands.entity(overlay).despawn();
+    }
+
+    for child in children.iter() {
+        if let Ok(mut text) = chevron_query.get_mut(child) {
+            text.text = Icon::CHEVRON_DOWN.to_string();
+        }
+        if let Ok(sub_children) = children_query.get(child) {
+            for sub in sub_children.iter() {
+                if let Ok(mut text) = chevron_query.get_mut(sub) {
+                    text.text = Icon::CHEVRON_DOWN.to_string();
+                }
+            }
+        }
+    }
+}
+
+fn close_select_on_escape(
+    mut commands: Commands,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut select_query: Query<(&mut LumaSelect, &Children)>,
+    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    children_query: Query<&Children>,
+) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        for (mut select, children) in select_query.iter_mut() {
+            if select.is_open {
+                select.is_open = false;
+                if let Some(overlay) = select.overlay_entity.take() {
+                    commands.entity(overlay).despawn();
+                }
+                for child in children.iter() {
+                    if let Ok(mut text) = chevron_query.get_mut(child) {
+                        text.text = Icon::CHEVRON_DOWN.to_string();
+                    }
+                    if let Ok(sub_children) = children_query.get(child) {
+                        for sub in sub_children.iter() {
+                            if let Ok(mut text) = chevron_query.get_mut(sub) {
+                                text.text = Icon::CHEVRON_DOWN.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn cleanup_orphaned_select_overlays(
+    mut commands: Commands,
+    overlay_query: Query<(Entity, &LumaSelectOverlay)>,
+    select_query: Query<&LumaSelect>,
+) {
+    for (overlay_entity, overlay) in overlay_query.iter() {
+        if !select_query.contains(overlay.select_entity) {
+            commands.entity(overlay_entity).despawn();
         }
     }
 }
@@ -235,6 +884,17 @@ pub struct LumaSelectPlugin;
 impl Plugin for LumaSelectPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaSelect>()
-            .add_observer(select_click_observer);
+            .register_type::<LumaSelectTrigger>()
+            .register_type::<LumaSelectMenu>()
+            .register_type::<LumaSelectText>()
+            .register_type::<LumaSelectChevron>()
+            .register_type::<LumaSelectOptionItem>()
+            .register_type::<LumaSelectOverlay>()
+            .register_type::<LumaSelectBackdrop>()
+            .add_systems(Update, (close_select_on_escape, cleanup_orphaned_select_overlays))
+            .add_observer(on_select_trigger_click)
+            .add_observer(on_select_trigger_activate)
+            .add_observer(on_select_option_click)
+            .add_observer(on_select_backdrop_click);
     }
 }

@@ -36,9 +36,9 @@ pub struct RadioChanged {
     pub entity: Entity,
 }
 
-const SELECTED_COLOR: Color = Color::srgb(0.20, 0.45, 0.90);
-const UNSELECTED_BORDER: Color = Color::srgb(0.30, 0.35, 0.45);
-const CIRCLE_BG: Color = Color::srgba(0.12, 0.15, 0.20, 0.8);
+const SELECTED_COLOR: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
+const UNSELECTED_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
+const CIRCLE_BG: Color = Color::srgb_u8(0x12, 0x12, 0x14);
 
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 
@@ -317,6 +317,65 @@ fn on_radio_activate(
     }
 }
 
+fn keyboard_radio_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
+    mut focus_state: Option<ResMut<UFocusState>>,
+    focused_query: Query<Entity, With<UFocused>>,
+    mut all_radios: Query<(
+        Entity,
+        &mut LumaRadio,
+        &mut UBorder,
+        Option<&Children>,
+        Option<&mut UFocusVisual>,
+    )>,
+    mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+
+    let prev = keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::ArrowUp);
+    let next = keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::ArrowDown);
+    if !prev && !next {
+        return;
+    }
+
+    let Some(focused_entity) = focused_query.iter().find(|&e| all_radios.contains(e)) else {
+        return;
+    };
+
+    let Ok((_, focused_radio, _, _, _)) = all_radios.get(focused_entity) else {
+        return;
+    };
+    let target_group = focused_radio.group.clone();
+
+    let group_entities: Vec<Entity> = all_radios
+        .iter()
+        .filter(|(_, r, _, _, _)| r.group == target_group && !r.disabled)
+        .map(|(e, _, _, _, _)| e)
+        .collect();
+
+    if group_entities.is_empty() {
+        return;
+    }
+
+    if let Some(pos) = group_entities.iter().position(|&e| e == focused_entity) {
+        let next_idx = if prev {
+            if pos == 0 { group_entities.len() - 1 } else { pos - 1 }
+        } else {
+            (pos + 1) % group_entities.len()
+        };
+
+        let target_entity = group_entities[next_idx];
+        select_radio(target_entity, &mut commands, &mut all_radios, &mut dot_query);
+
+        if let Some(ref mut state) = focus_state {
+            set_focus(&mut commands, state, Some(target_entity), FocusModality::Keyboard);
+        }
+    }
+}
+
 pub struct LumaRadioPlugin;
 
 impl Plugin for LumaRadioPlugin {
@@ -324,6 +383,7 @@ impl Plugin for LumaRadioPlugin {
         app.register_type::<LumaRadio>()
             .register_type::<LumaRadioDot>()
             .add_observer(on_radio_click)
-            .add_observer(on_radio_activate);
+            .add_observer(on_radio_activate)
+            .add_systems(Update, keyboard_radio_system);
     }
 }

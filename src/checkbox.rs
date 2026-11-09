@@ -32,10 +32,10 @@ pub struct CheckboxChanged {
     pub is_checked: bool,
 }
 
-const CHECKED_BG: Color = Color::srgb(0.20, 0.45, 0.90);
-const UNCHECKED_BG: Color = Color::srgba(0.12, 0.15, 0.20, 0.8);
-const CHECKED_BORDER: Color = Color::srgb(0.28, 0.55, 1.00);
-const UNCHECKED_BORDER: Color = Color::srgb(0.30, 0.35, 0.45);
+const CHECKED_BG: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
+const UNCHECKED_BG: Color = Color::srgb_u8(0x12, 0x12, 0x14);
+const CHECKED_BORDER: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
+const UNCHECKED_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
 
 /// Declarative Checkbox widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]

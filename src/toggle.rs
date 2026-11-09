@@ -42,10 +42,10 @@ const TRACK_HEIGHT: f32 = 24.0;
 const KNOB_SIZE: f32 = 20.0;
 const TRAVEL_DISTANCE: f32 = TRACK_WIDTH - KNOB_SIZE - 4.0; // 20.0px
 
-const CHECKED_BG: Color = Color::srgb(0.20, 0.45, 0.90);
-const UNCHECKED_BG: Color = Color::srgb(0.18, 0.22, 0.28);
-const CHECKED_BORDER: Color = Color::srgb(0.28, 0.55, 1.00);
-const UNCHECKED_BORDER: Color = Color::srgb(0.28, 0.32, 0.40);
+const CHECKED_BG: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
+const UNCHECKED_BG: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
+const CHECKED_BORDER: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
+const UNCHECKED_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
 
 /// Declarative Toggle switch widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]

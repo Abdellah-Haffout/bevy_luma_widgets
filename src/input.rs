@@ -1,5 +1,6 @@
 //! Styled text input field widget with validation states, icons, and presets.
 
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
@@ -20,6 +21,10 @@ pub enum InputState {
 /// Marker component identifying a high-level Luma text input.
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaInput;
+
+/// Marker component for the password visibility eye toggle button.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaPasswordToggle;
 
 /// Declarative TextInput configuration and scene widget struct.
 #[derive(Clone, Debug, Reflect)]
@@ -210,6 +215,7 @@ impl Scene for TextInput {
         let input_text_color = style.text_color;
         let font = self.font;
         let icon_font = self.icon_font;
+        let is_password_mode = mode == TextInputMode::Password;
 
         let s = bsn! {
             LumaInput
@@ -269,7 +275,18 @@ impl Scene for TextInput {
                     }
                 ]
                 --
-                UNode::default()
+                UNode {
+                    padding: USides::all(4.0),
+                    border_radius: UCornerRadius::all(4.0),
+                    background_color: Color::NONE,
+                }
+                LumaPasswordToggle
+                UInteraction::default()
+                UInteractionColors {
+                    normal: Color::NONE,
+                    hovered: { if is_password_mode { Color::srgba(1.0, 1.0, 1.0, 0.08) } else { Color::NONE } },
+                    pressed: { if is_password_mode { Color::srgba(1.0, 1.0, 1.0, 0.16) } else { Color::NONE } },
+                }
                 ULayout {
                     display: { if has_trailing { UDisplay::Flex } else { UDisplay::None } },
                 }
@@ -296,4 +313,82 @@ pub fn luma_input(placeholder: impl Into<String>) -> TextInput {
 /// Spawns a password text input field with masked character display scene.
 pub fn luma_password_input(placeholder: impl Into<String>) -> TextInput {
     TextInput::password(placeholder)
+}
+
+fn on_password_toggle_click(
+    trigger: On<PointerClick>,
+    toggle_query: Query<&LumaPasswordToggle>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut input_query: Query<&mut UTextInput>,
+    mut icon_text_query: Query<&mut UText>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+
+    let is_toggle = toggle_query.contains(trigger.entity)
+        || parents_query
+            .iter_ancestors(trigger.entity)
+            .any(|e| toggle_query.contains(e));
+
+    if !is_toggle {
+        return;
+    }
+
+    // Find the UTextInput ancestor
+    let input_target = if input_query.contains(trigger.entity) {
+        Some(trigger.entity)
+    } else {
+        parents_query
+            .iter_ancestors(trigger.entity)
+            .find(|&e| input_query.contains(e))
+    };
+
+    let Some(input_entity) = input_target else {
+        return;
+    };
+    let Ok(mut text_input) = input_query.get_mut(input_entity) else {
+        return;
+    };
+
+    let is_password = text_input.mode == TextInputMode::Password;
+    text_input.mode = if is_password {
+        TextInputMode::Normal
+    } else {
+        TextInputMode::Password
+    };
+
+    // Update the eye icon
+    let toggle_node = if toggle_query.contains(trigger.entity) {
+        trigger.entity
+    } else {
+        parents_query
+            .iter_ancestors(trigger.entity)
+            .find(|&e| toggle_query.contains(e))
+            .unwrap_or(trigger.entity)
+    };
+
+    if let Ok(children) = children_query.get(toggle_node) {
+        for child in children.iter() {
+            if let Ok(mut text) = icon_text_query.get_mut(child) {
+                text.text = if is_password {
+                    Icon::EYE_OFF.to_string()
+                } else {
+                    Icon::EYE.to_string()
+                };
+            }
+        }
+    }
+}
+
+/// Plugin registering text input widget systems and observers.
+pub struct LumaInputPlugin;
+
+impl Plugin for LumaInputPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<LumaInput>()
+            .register_type::<LumaPasswordToggle>()
+            .add_observer(on_password_toggle_click);
+    }
 }
