@@ -197,13 +197,7 @@ impl Scene for Slider {
         let thumb_offset = ratio * thumb_travel;
         let track_top = (SLIDER_HEIGHT - trk_h) * 0.5;
         let thumb_top = (SLIDER_HEIGHT - thmb_sz) * 0.5;
-        let fill_width = if ratio <= 0.001 {
-            0.0
-        } else if ratio >= 0.999 {
-            self.width
-        } else {
-            thumb_offset + thmb_sz * 0.5
-        };
+        let fill_width = (ratio * self.width).clamp(0.0, self.width);
 
         let value = self.value;
         let min = self.min;
@@ -247,6 +241,7 @@ impl Scene for Slider {
                     left: { UVal::Px(0.0) },
                     top: { UVal::Px(track_top) },
                 }
+                UZIndex::Local(0)
                 --
                 // 2. Active Fill bar
                 LumaSliderFill
@@ -261,6 +256,8 @@ impl Scene for Slider {
                     left: { UVal::Px(0.0) },
                     top: { UVal::Px(track_top) },
                 }
+                UZIndex::Local(1)
+                Visibility::from(if fill_width <= 0.001 { Visibility::Hidden } else { Visibility::Inherited })
                 --
                 // 3. Draggable Thumb Knob
                 LumaSliderThumb
@@ -286,6 +283,7 @@ impl Scene for Slider {
                     left: { UVal::Px(thumb_offset) },
                     top: { UVal::Px(thumb_top) },
                 }
+                UZIndex::Local(2)
             ]
         };
 
@@ -306,38 +304,45 @@ pub fn luma_slider_stepped(value: f32, min: f32, max: f32, step: f32, width: f32
 fn update_slider_visuals(
     slider: &LumaSlider,
     children: Option<&Children>,
-    fill_query: &mut Query<&mut UNode, With<LumaSliderFill>>,
+    fill_query: &mut Query<(&mut UNode, &mut Visibility), With<LumaSliderFill>>,
     thumb_query: &mut Query<&mut USelf, With<LumaSliderThumb>>,
 ) {
     let ratio = slider.ratio();
     let thumb_travel = (slider.width - THUMB_SIZE).max(0.0);
     let thumb_offset = ratio * thumb_travel;
-
-    let fill_width = if ratio <= 0.001 {
-        0.0
-    } else if ratio >= 0.999 {
-        slider.width
-    } else {
-        thumb_offset + THUMB_SIZE * 0.5
-    };
+    let fill_width = (ratio * slider.width).clamp(0.0, slider.width);
 
     if let Some(children) = children {
         for child in children.iter() {
-            if let Ok(mut fill_node) = fill_query.get_mut(child) {
-                fill_node.width = UVal::Px(fill_width);
+            if let Ok((mut fill_node, mut visibility)) = fill_query.get_mut(child) {
+                let target_width = UVal::Px(fill_width);
+                if fill_node.width != target_width {
+                    fill_node.width = target_width;
+                }
+                let target_vis = if fill_width <= 0.001 {
+                    Visibility::Hidden
+                } else {
+                    Visibility::Inherited
+                };
+                if *visibility != target_vis {
+                    *visibility = target_vis;
+                }
             }
             if let Ok(mut thumb_self) = thumb_query.get_mut(child) {
-                thumb_self.left = UVal::Px(thumb_offset);
+                let target_left = UVal::Px(thumb_offset);
+                if thumb_self.left != target_left {
+                    thumb_self.left = target_left;
+                }
             }
         }
     }
 }
 
 fn on_slider_pointer_down(
-    trigger: On<PointerPress>,
+    mut trigger: On<PointerPress>,
     mut commands: Commands,
     mut slider_query: Query<(Entity, &mut LumaSlider, &GlobalTransform, &ComputedSize, Option<&Children>)>,
-    mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
+    mut fill_query: Query<(&mut UNode, &mut Visibility), With<LumaSliderFill>>,
     mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
     parents_query: Query<&ChildOf>,
     cameras: Query<(&Camera, &GlobalTransform)>,
@@ -353,6 +358,12 @@ fn on_slider_pointer_down(
     let Some(entity) = target else {
         return;
     };
+    trigger.propagate(false);
+
+    // If clicking directly on the thumb knob, do not jump value - just grab it for dragging
+    if thumb_query.contains(trigger.entity) {
+        return;
+    }
 
     if let Ok((entity, mut slider, global_tf, computed_size, children)) = slider_query.get_mut(entity) {
         if slider.disabled {
@@ -393,10 +404,10 @@ fn on_slider_pointer_down(
 }
 
 fn on_slider_drag(
-    trigger: On<PointerDrag>,
+    mut trigger: On<PointerDrag>,
     mut commands: Commands,
     mut slider_query: Query<(Entity, &mut LumaSlider, &GlobalTransform, &ComputedSize, Option<&Children>)>,
-    mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
+    mut fill_query: Query<(&mut UNode, &mut Visibility), With<LumaSliderFill>>,
     mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
     parents_query: Query<&ChildOf>,
     cameras: Query<(&Camera, &GlobalTransform)>,
@@ -412,6 +423,7 @@ fn on_slider_drag(
     let Some(entity) = target else {
         return;
     };
+    trigger.propagate(false);
 
     if let Ok((entity, mut slider, global_tf, computed_size, children)) = slider_query.get_mut(entity) {
         if slider.disabled {
@@ -453,7 +465,7 @@ fn keyboard_slider_system(
     keyboard: Option<Res<ButtonInput<KeyCode>>>,
     mut commands: Commands,
     mut slider_query: Query<(Entity, &mut LumaSlider, Option<&Children>), With<UFocused>>,
-    mut fill_query: Query<&mut UNode, With<LumaSliderFill>>,
+    mut fill_query: Query<(&mut UNode, &mut Visibility), With<LumaSliderFill>>,
     mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
 ) {
     let Some(keyboard) = keyboard else {
@@ -495,6 +507,16 @@ fn keyboard_slider_system(
     }
 }
 
+fn sync_slider_on_change(
+    slider_query: Query<(&LumaSlider, Option<&Children>), Changed<LumaSlider>>,
+    mut fill_query: Query<(&mut UNode, &mut Visibility), With<LumaSliderFill>>,
+    mut thumb_query: Query<&mut USelf, With<LumaSliderThumb>>,
+) {
+    for (slider, children) in slider_query.iter() {
+        update_slider_visuals(slider, children, &mut fill_query, &mut thumb_query);
+    }
+}
+
 pub struct LumaSliderPlugin;
 
 impl Plugin for LumaSliderPlugin {
@@ -504,6 +526,6 @@ impl Plugin for LumaSliderPlugin {
             .register_type::<LumaSliderThumb>()
             .add_observer(on_slider_pointer_down)
             .add_observer(on_slider_drag)
-            .add_systems(Update, keyboard_slider_system);
+            .add_systems(Update, (keyboard_slider_system, sync_slider_on_change));
     }
 }
