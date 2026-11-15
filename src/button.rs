@@ -1,11 +1,11 @@
 //! Interactive button widget with variants, sizes, styles, and icon support.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
-use crate::theme::ButtonStyle;
+use crate::helpers::{ConditionalScene, find_ancestor_or_self, interaction_colors, is_primary_click};
+use crate::theme::{ButtonStyle, WidgetColors};
 
 /// Styling variant for buttons.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
@@ -75,6 +75,9 @@ pub struct LumaButton {
     pub variant: ButtonVariant,
     pub size: ButtonSize,
     pub disabled: bool,
+    pub loading: bool,
+    pub is_icon_only: bool,
+    pub has_explicit_size: bool,
     pub has_explicit_style: bool,
 }
 
@@ -84,10 +87,21 @@ impl Default for LumaButton {
             variant: ButtonVariant::Primary,
             size: ButtonSize::Medium,
             disabled: false,
+            loading: false,
+            is_icon_only: false,
+            has_explicit_size: false,
             has_explicit_style: false,
         }
     }
 }
+
+/// Marker component on the label text entity inside a [`Button`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaButtonLabel;
+
+/// Marker component on the leading/icon-only text entity inside a [`Button`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaButtonIcon;
 
 /// Event triggered when a button is clicked.
 #[derive(Event, Clone, Copy, Debug)]
@@ -103,49 +117,27 @@ pub struct ButtonStyleColors {
     pub text_color: Color,
 }
 
+impl From<ButtonStyle> for ButtonStyleColors {
+    fn from(style: ButtonStyle) -> Self {
+        Self {
+            bg_normal: style.bg_normal,
+            bg_hover: style.bg_hover,
+            bg_pressed: style.bg_pressed,
+            border_color: style.border_color,
+            border_width: style.border_width,
+            text_color: style.text_color,
+        }
+    }
+}
+
 impl ButtonVariant {
     pub fn colors(&self) -> ButtonStyleColors {
         match self {
-            ButtonVariant::Primary => ButtonStyleColors {
-                bg_normal: Color::srgb_u8(0x1F, 0xD6, 0x9A),
-                bg_hover: Color::srgb_u8(0x3D, 0xE2, 0xAC),
-                bg_pressed: Color::srgb_u8(0x17, 0xB8, 0x84),
-                border_color: Color::srgb_u8(0x1F, 0xD6, 0x9A),
-                border_width: 1.0,
-                text_color: Color::srgb_u8(0x06, 0x22, 0x18),
-            },
-            ButtonVariant::Secondary => ButtonStyleColors {
-                bg_normal: Color::srgb_u8(0x18, 0x18, 0x1B),
-                bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
-                bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
-                border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
-                border_width: 1.0,
-                text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
-            },
-            ButtonVariant::Outline => ButtonStyleColors {
-                bg_normal: Color::srgb_u8(0x12, 0x12, 0x14),
-                bg_hover: Color::srgb_u8(0x24, 0x24, 0x28),
-                bg_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
-                border_color: Color::srgb_u8(0x2B, 0x2B, 0x30),
-                border_width: 1.0,
-                text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
-            },
-            ButtonVariant::Ghost => ButtonStyleColors {
-                bg_normal: Color::NONE,
-                bg_hover: Color::srgba(1.0, 1.0, 1.0, 0.06),
-                bg_pressed: Color::srgba(1.0, 1.0, 1.0, 0.12),
-                border_color: Color::NONE,
-                border_width: 0.0,
-                text_color: Color::srgb_u8(0xEC, 0xEC, 0xEE),
-            },
-            ButtonVariant::Danger => ButtonStyleColors {
-                bg_normal: Color::srgb_u8(0x3B, 0x12, 0x13),
-                bg_hover: Color::srgb_u8(0x4A, 0x17, 0x18),
-                bg_pressed: Color::srgb_u8(0x30, 0x0E, 0x0F),
-                border_color: Color::srgb_u8(0x52, 0x1C, 0x1D),
-                border_width: 1.0,
-                text_color: Color::srgb_u8(0xF4, 0x6B, 0x6B),
-            },
+            ButtonVariant::Primary => ButtonStyle::primary().into(),
+            ButtonVariant::Secondary => ButtonStyle::secondary().into(),
+            ButtonVariant::Outline => ButtonStyle::outline().into(),
+            ButtonVariant::Ghost => ButtonStyle::ghost().into(),
+            ButtonVariant::Danger => ButtonStyle::danger().into(),
         }
     }
 }
@@ -331,45 +323,106 @@ impl Scene for Button {
         };
 
         let has_explicit_style = self.style.is_some();
+        let has_explicit_size = self.size != ButtonSize::Medium;
         let icon_size = self.size.icon_size();
-        let icon_text = self.icon.clone().unwrap_or_default();
         let has_icon = self.icon.is_some() && !self.loading;
+        let icon_text = self.icon.clone().unwrap_or_default();
         let has_label = !self.label.is_empty();
         let loading = self.loading;
         let variant = self.variant;
         let size = self.size;
         let disabled = self.disabled;
+        let is_icon_only = self.icon_only || self.fab;
         let icon_font = self.icon_font;
         let label = self.label;
         let font = self.font;
+
+        let theme_colors = WidgetColors::default();
+        let (effective_bg, effective_border, effective_fg) = if disabled {
+            let bg = if variant == ButtonVariant::Ghost {
+                Color::NONE
+            } else {
+                theme_colors.disabled_bg()
+            };
+            let border = if variant == ButtonVariant::Ghost {
+                Color::NONE
+            } else {
+                theme_colors.disabled_border()
+            };
+            (bg, border, theme_colors.disabled_text())
+        } else {
+            (bg_normal, border_color, text_color)
+        };
+
+        let i_colors = interaction_colors(
+            effective_bg,
+            bg_hover,
+            bg_pressed,
+            disabled || loading,
+        );
+        let focus_color = theme_colors.focus_ring();
+
+        let spinner_child = ConditionalScene(loading.then(|| {
+            crate::spinner::Spinner::new()
+                .size(icon_size)
+                .thickness(2.0)
+                .color(effective_fg)
+        }));
+        let icon_child = ConditionalScene(has_icon.then(|| {
+            bsn! {
+                LumaButtonIcon
+                UText {
+                    text: icon_text,
+                    font_size: icon_size,
+                    font: icon_font,
+                    color: effective_fg,
+                }
+            }
+        }));
+        let label_child = ConditionalScene(has_label.then(|| {
+            bsn! {
+                LumaButtonLabel
+                UText {
+                    text: label,
+                    font_size,
+                    font,
+                    color: effective_fg,
+                }
+            }
+        }));
 
         let s = bsn! {
             LumaButton {
                 variant,
                 size,
                 disabled,
+                loading,
+                is_icon_only,
+                has_explicit_size,
                 has_explicit_style,
             }
             UNode {
                 width,
                 min_height,
-                background_color: bg_normal,
+                background_color: effective_bg,
                 border_radius: UCornerRadius::all(radius),
                 padding,
             }
+            USelf {
+                flex_shrink: { Some(0.0) },
+            }
             UBorder {
-                color: border_color,
+                color: effective_border,
                 width: border_width,
                 radius: UCornerRadius::all(radius),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: bg_normal,
-                hovered: bg_hover,
-                pressed: bg_pressed,
+            i_colors
+            UFocusable {
+                enabled: { !disabled },
+                ..UFocusable::new()
             }
-            UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            UFocusVisual::border(focus_color, 2.0)
             ULayout {
                 display: UDisplay::Flex,
                 flex_direction: UFlexDirection::Row,
@@ -378,44 +431,11 @@ impl Scene for Button {
                 gap: 8.0,
             }
             Children [
-                UNode::default()
-                ULayout {
-                    display: { if loading { UDisplay::Flex } else { UDisplay::None } },
-                }
-                Children [
-                    @{
-                        crate::spinner::Spinner::new()
-                            .size(icon_size)
-                            .thickness(2.0)
-                            .color(text_color)
-                    }
-                ]
+                @{spinner_child}
                 --
-                UNode::default()
-                ULayout {
-                    display: { if has_icon { UDisplay::Flex } else { UDisplay::None } },
-                }
-                Children [
-                    UText {
-                        text: icon_text,
-                        font_size: icon_size,
-                        font: icon_font,
-                        color: text_color,
-                    }
-                ]
+                @{icon_child}
                 --
-                UNode::default()
-                ULayout {
-                    display: { if has_label { UDisplay::Flex } else { UDisplay::None } },
-                }
-                Children [
-                    UText {
-                        text: label,
-                        font_size,
-                        font,
-                        color: text_color,
-                    }
-                ]
+                @{label_child}
             ]
         };
 
@@ -458,10 +478,73 @@ pub fn luma_icon_button(
     icon_font: Handle<Font>,
 ) -> Button {
     Button::default()
-        .icon(icon)
+        .icon_only(icon)
         .variant(variant)
         .size(size)
         .icon_font(icon_font)
+}
+
+fn trigger_button_if_active(entity: Entity, query: &Query<&LumaButton>, commands: &mut Commands) {
+    if let Ok(button) = query.get(entity) {
+        if !button.disabled && !button.loading {
+            commands.trigger(ButtonClicked(entity));
+        }
+    }
+}
+
+/// Applies `variant` visual colors onto a spawned [`Button`] entity and its label/icon children.
+pub(crate) fn apply_button_variant_visuals(
+    variant: ButtonVariant,
+    luma_btn: &mut LumaButton,
+    node: &mut UNode,
+    border: &mut UBorder,
+    interaction_colors_comp: &mut UInteractionColors,
+    children: Option<&Children>,
+    children_query: &Query<&Children>,
+    text_query: &mut Query<&mut UText>,
+    label_or_icon_query: &Query<(), Or<(With<LumaButtonLabel>, With<LumaButtonIcon>)>>,
+) {
+    luma_btn.variant = variant;
+    let c = variant.colors();
+    let theme_colors = WidgetColors::default();
+    let (bg, brd, fg) = if luma_btn.disabled {
+        let bg = if variant == ButtonVariant::Ghost {
+            Color::NONE
+        } else {
+            theme_colors.disabled_bg()
+        };
+        let brd = if variant == ButtonVariant::Ghost {
+            Color::NONE
+        } else {
+            theme_colors.disabled_border()
+        };
+        (bg, brd, theme_colors.disabled_text())
+    } else {
+        (c.bg_normal, c.border_color, c.text_color)
+    };
+
+    node.background_color = bg;
+    border.color = brd;
+    border.width = c.border_width;
+    *interaction_colors_comp = interaction_colors(
+        bg,
+        c.bg_hover,
+        c.bg_pressed,
+        luma_btn.disabled || luma_btn.loading,
+    );
+
+    if let Some(children) = children {
+        for &child in children {
+            crate::helpers::visit_descendants(child, children_query, |e| {
+                if label_or_icon_query.contains(e) {
+                    if let Ok(mut txt) = text_query.get_mut(e) {
+                        txt.color = fg;
+                    }
+                }
+                crate::helpers::DescendantVisit::Continue
+            });
+        }
+    }
 }
 
 fn on_button_pointer_click(
@@ -470,20 +553,11 @@ fn on_button_pointer_click(
     query: Query<&LumaButton>,
     parents_query: Query<&ChildOf>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
-    };
-    if let Some(entity) = target {
-        if let Ok(button) = query.get(entity) {
-            if !button.disabled {
-                commands.trigger(ButtonClicked(entity));
-            }
-        }
+    if let Some(entity) = find_ancestor_or_self(trigger.entity, &query, &parents_query) {
+        trigger_button_if_active(entity, &query, &mut commands);
     }
 }
 
@@ -493,17 +567,8 @@ fn on_button_focus_activate(
     query: Query<&LumaButton>,
     parents_query: Query<&ChildOf>,
 ) {
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
-    };
-    if let Some(entity) = target {
-        if let Ok(button) = query.get(entity) {
-            if !button.disabled {
-                commands.trigger(ButtonClicked(entity));
-            }
-        }
+    if let Some(entity) = find_ancestor_or_self(trigger.entity, &query, &parents_query) {
+        trigger_button_if_active(entity, &query, &mut commands);
     }
 }
 
@@ -512,6 +577,8 @@ pub struct LumaButtonPlugin;
 impl Plugin for LumaButtonPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaButton>()
+            .register_type::<LumaButtonLabel>()
+            .register_type::<LumaButtonIcon>()
             .register_type::<ButtonVariant>()
             .register_type::<ButtonSize>()
             .add_observer(on_button_pointer_click)

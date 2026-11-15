@@ -5,12 +5,12 @@
 //! Features Blender-style internal slider fill bar, 3D coordinate axis presets (X/Y/Z),
 //! and split label/value layouts.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
-use crate::theme::DragValueStyle;
+use crate::helpers::{find_ancestor_or_self, interaction_colors, is_primary_click, snap_stepped};
+use crate::theme::{DragValueStyle, WidgetColors};
 
 /// Axis styling mode inspired by Blender 3D's Transform inputs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
@@ -64,6 +64,8 @@ pub struct LumaDragValue {
     pub decimals: usize,
     pub disabled: bool,
     pub axis: DragValueAxis,
+    pub style: DragValueStyle,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaDragValue {
@@ -79,6 +81,8 @@ impl Default for LumaDragValue {
             decimals: 1,
             disabled: false,
             axis: DragValueAxis::None,
+            style: DragValueStyle::default(),
+            has_explicit_style: false,
         }
     }
 }
@@ -110,23 +114,16 @@ impl LumaDragValue {
         }
     }
 
-    /// Applies a horizontal delta movement to the value.
-    ///
-    /// Returns `true` if the value actually changed.
-    pub fn apply_delta(&mut self, delta_x: f32) -> bool {
-        if self.disabled || delta_x.abs() < f32::EPSILON {
+    /// Applies a direct delta in value units (used by arrow buttons and keyboard stepping).
+    pub fn apply_value_delta(&mut self, value_delta: f32) -> bool {
+        if self.disabled || value_delta.abs() < f32::EPSILON {
             return false;
         }
 
-        let change = delta_x * self.speed;
-        let raw = self.value + change;
+        let raw = self.value + value_delta;
 
         let stepped = if let Some(step) = self.step {
-            if step > 0.0 {
-                (raw / step).round() * step
-            } else {
-                raw
-            }
+            snap_stepped(raw, step, self.min.unwrap_or(0.0))
         } else {
             raw
         };
@@ -139,7 +136,7 @@ impl LumaDragValue {
             clamped = clamped.min(max);
         }
 
-        let factor = 10f32.powi(self.decimals as i32);
+        let factor = 10f32.powi(self.decimals.min(9) as i32);
         let rounded = (clamped * factor).round() / factor;
 
         if (rounded - self.value).abs() > f32::EPSILON {
@@ -148,6 +145,16 @@ impl LumaDragValue {
         } else {
             false
         }
+    }
+
+    /// Applies a horizontal delta movement to the value.
+    ///
+    /// Returns `true` if the value actually changed.
+    pub fn apply_delta(&mut self, delta_x: f32) -> bool {
+        if self.disabled || delta_x.abs() < f32::EPSILON {
+            return false;
+        }
+        self.apply_value_delta(delta_x * self.speed)
     }
 }
 
@@ -380,9 +387,11 @@ impl Scene for DragValue {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let has_explicit_style = self.style.is_some();
         let style = self.style.unwrap_or_default();
+        let colors = WidgetColors::default();
         let bg = if self.disabled {
-            Color::srgba(0.10, 0.11, 0.14, 0.5)
+            colors.disabled_bg()
         } else {
             style.bg_normal
         };
@@ -398,7 +407,7 @@ impl Scene for DragValue {
         });
 
         let border_color = if self.disabled {
-            Color::srgb(0.18, 0.20, 0.25)
+            colors.disabled_border()
         } else if let Some(ac) = axis_color {
             Color::srgba(ac.to_srgba().red, ac.to_srgba().green, ac.to_srgba().blue, 0.40)
         } else {
@@ -416,20 +425,24 @@ impl Scene for DragValue {
         let height = style.height;
         let font_size = style.font_size;
         let label_font_size = font_size * 0.95;
-        let bg_hover = style.bg_hover;
-        let bg_active = style.bg_active;
+        let root_colors = interaction_colors(bg, style.bg_hover, style.bg_active, self.disabled);
         let text_color = if self.disabled {
-            Color::srgb(0.40, 0.44, 0.52)
+            colors.disabled_text()
         } else {
             style.text_color
         };
 
         let label_color = if self.disabled {
-            Color::srgb(0.35, 0.38, 0.46)
+            dim_color_fallback(&colors)
         } else if let Some(ac) = axis_color {
             ac
         } else {
             Color::srgb(0.68, 0.72, 0.80)
+        };
+        let arrow_color = if self.disabled {
+            colors.disabled_text()
+        } else {
+            Color::srgb(0.50, 0.54, 0.62)
         };
 
         let formatted = {
@@ -454,33 +467,24 @@ impl Scene for DragValue {
         let label_str = self.label.clone().unwrap_or_default();
         let has_label = self.label.is_some();
 
-        let temp_drag = LumaDragValue {
+        let luma_drag = LumaDragValue {
             value,
             speed,
             min,
             max,
             step,
-            prefix: prefix.clone(),
-            suffix: suffix.clone(),
+            prefix,
+            suffix,
             decimals,
             disabled,
             axis,
+            style,
+            has_explicit_style,
         };
-        let ratio = temp_drag.ratio();
+        let ratio = luma_drag.ratio();
 
         let s = bsn! {
-            LumaDragValue {
-                value,
-                speed,
-                min,
-                max,
-                step,
-                prefix,
-                suffix,
-                decimals,
-                disabled,
-                axis,
-            }
+            luma_drag
             UNode {
                 width,
                 height: UVal::Px(height),
@@ -498,12 +502,11 @@ impl Scene for DragValue {
                 align_items: UAlignItems::Center,
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: bg,
-                hovered: bg_hover,
-                pressed: bg_active,
+            root_colors
+            UFocusable {
+                enabled: { !disabled },
+                ..UFocusable::default()
             }
-            UFocusable::new()
             UFocusVisual::border(active_border_color, 1.5)
             Children [
                 // 1. Blender Internal Slider Fill Track (Absolute behind text)
@@ -584,7 +587,7 @@ impl Scene for DragValue {
                             text: { Icon::CHEVRON_LEFT.to_string() },
                             font_size: 10.0,
                             font: { icon_font.clone() },
-                            color: Color::srgb(0.50, 0.54, 0.62),
+                            color: arrow_color,
                         }
                     ]
                     --
@@ -653,7 +656,7 @@ impl Scene for DragValue {
                             text: { Icon::CHEVRON_RIGHT.to_string() },
                             font_size: 10.0,
                             font: icon_font,
-                            color: Color::srgb(0.50, 0.54, 0.62),
+                            color: arrow_color,
                         }
                     ]
                 ]
@@ -662,6 +665,11 @@ impl Scene for DragValue {
 
         s.resolve(context, scene)
     }
+}
+
+#[inline]
+fn dim_color_fallback(colors: &WidgetColors) -> Color {
+    colors.disabled_text()
 }
 
 /// Helper constructor to create a continuous numeric scrubber.
@@ -719,6 +727,40 @@ fn sync_drag_value_visuals(
     }
 }
 
+fn apply_drag_delta_and_emit(
+    entity: Entity,
+    drag_val: &mut LumaDragValue,
+    value_delta: f32,
+    commands: &mut Commands,
+    children_query: &Query<&Children>,
+    text_query: &mut Query<&mut UText, With<LumaDragValueText>>,
+    fill_query: &mut Query<&mut UNode, With<LumaDragValueFill>>,
+) {
+    if drag_val.apply_value_delta(value_delta) {
+        let new_text = drag_val.formatted_text();
+        let new_val = drag_val.value;
+        let ratio = drag_val.ratio();
+
+        sync_drag_value_visuals(entity, &new_text, ratio, children_query, text_query, fill_query);
+
+        commands.trigger(DragValueChanged {
+            entity,
+            value: new_val,
+        });
+    }
+}
+
+fn drag_value_default_border(drag_val: &LumaDragValue) -> Color {
+    if drag_val.disabled {
+        WidgetColors::default().disabled_border()
+    } else if let Some(ac) = drag_val.axis.color() {
+        let rgba = ac.to_srgba();
+        Color::srgba(rgba.red, rgba.green, rgba.blue, 0.40)
+    } else {
+        drag_val.style.border_color
+    }
+}
+
 fn on_drag_value_drag(
     trigger: On<PointerDrag>,
     mut commands: Commands,
@@ -731,12 +773,7 @@ fn on_drag_value_drag(
     if trigger.event().button != PointerButton::Primary {
         return;
     }
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
-    };
-    let Some(entity) = target else {
+    let Some(entity) = find_ancestor_or_self(trigger.entity, &query, &parents_query) else {
         return;
     };
 
@@ -746,18 +783,16 @@ fn on_drag_value_drag(
         }
 
         let delta_x = trigger.delta.x;
-        if drag_val.apply_delta(delta_x) {
-            let new_text = drag_val.formatted_text();
-            let new_val = drag_val.value;
-            let ratio = drag_val.ratio();
-
-            sync_drag_value_visuals(entity, &new_text, ratio, &children_query, &mut text_query, &mut fill_query);
-
-            commands.trigger(DragValueChanged {
-                entity,
-                value: new_val,
-            });
-        }
+        let speed = drag_val.speed;
+        apply_drag_delta_and_emit(
+            entity,
+            &mut drag_val,
+            delta_x * speed,
+            &mut commands,
+            &children_query,
+            &mut text_query,
+            &mut fill_query,
+        );
     }
 }
 
@@ -767,24 +802,15 @@ fn on_drag_value_drag_start(
     parents_query: Query<&ChildOf>,
     mut border_query: Query<&mut UBorder>,
 ) {
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
+    let Some(entity) = find_ancestor_or_self(trigger.entity, &query, &parents_query) else {
+        return;
     };
-    if let Some(entity) = target {
-        if let Ok(drag_val) = query.get(entity) {
-            if !drag_val.disabled {
-                if let Ok(mut border) = border_query.get_mut(entity) {
-                    let active_color = match drag_val.axis {
-                        DragValueAxis::X => Color::srgb(0.92, 0.32, 0.32),
-                        DragValueAxis::Y => Color::srgb(0.35, 0.85, 0.35),
-                        DragValueAxis::Z => Color::srgb(0.35, 0.65, 1.00),
-                        _ => Color::srgb(0.35, 0.65, 1.00),
-                    };
-                    border.color = active_color;
-                    border.width = 1.5;
-                }
+    if let Ok(drag_val) = query.get(entity) {
+        if !drag_val.disabled {
+            if let Ok(mut border) = border_query.get_mut(entity) {
+                let active_color = drag_val.axis.color().unwrap_or(drag_val.style.border_active);
+                border.color = active_color;
+                border.width = (drag_val.style.border_width + 0.5).max(1.5);
             }
         }
     }
@@ -796,22 +822,13 @@ fn on_drag_value_drag_end(
     parents_query: Query<&ChildOf>,
     mut border_query: Query<&mut UBorder>,
 ) {
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
+    let Some(entity) = find_ancestor_or_self(trigger.entity, &query, &parents_query) else {
+        return;
     };
-    if let Some(entity) = target {
-        if let Ok(drag_val) = query.get(entity) {
-            if let Ok(mut border) = border_query.get_mut(entity) {
-                let default_color = if let Some(ac) = drag_val.axis.color() {
-                    Color::srgba(ac.to_srgba().red, ac.to_srgba().green, ac.to_srgba().blue, 0.40)
-                } else {
-                    Color::srgb(0.22, 0.25, 0.30)
-                };
-                border.color = default_color;
-                border.width = 1.0;
-            }
+    if let Ok(drag_val) = query.get(entity) {
+        if let Ok(mut border) = border_query.get_mut(entity) {
+            border.color = drag_value_default_border(drag_val);
+            border.width = drag_val.style.border_width;
         }
     }
 }
@@ -822,22 +839,19 @@ fn on_drag_value_hover(
     parents_query: Query<&ChildOf>,
     mut border_query: Query<&mut UBorder>,
 ) {
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
+    let Some(entity) = find_ancestor_or_self(trigger.entity, &query, &parents_query) else {
+        return;
     };
-    if let Some(entity) = target {
-        if let Ok(drag_val) = query.get(entity) {
-            if !drag_val.disabled {
-                if let Ok(mut border) = border_query.get_mut(entity) {
-                    let hover_color = if let Some(ac) = drag_val.axis.color() {
-                        Color::srgba(ac.to_srgba().red, ac.to_srgba().green, ac.to_srgba().blue, 0.70)
-                    } else {
-                        Color::srgb(0.32, 0.38, 0.48)
-                    };
-                    border.color = hover_color;
-                }
+    if let Ok(drag_val) = query.get(entity) {
+        if !drag_val.disabled {
+            if let Ok(mut border) = border_query.get_mut(entity) {
+                let hover_color = if let Some(ac) = drag_val.axis.color() {
+                    let rgba = ac.to_srgba();
+                    Color::srgba(rgba.red, rgba.green, rgba.blue, 0.70)
+                } else {
+                    drag_val.style.border_hover
+                };
+                border.color = hover_color;
             }
         }
     }
@@ -849,22 +863,51 @@ fn on_drag_value_out(
     parents_query: Query<&ChildOf>,
     mut border_query: Query<&mut UBorder>,
 ) {
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e))
+    let Some(entity) = find_ancestor_or_self(trigger.entity, &query, &parents_query) else {
+        return;
     };
-    if let Some(entity) = target {
-        if let Ok(drag_val) = query.get(entity) {
-            if let Ok(mut border) = border_query.get_mut(entity) {
-                let default_color = if let Some(ac) = drag_val.axis.color() {
-                    Color::srgba(ac.to_srgba().red, ac.to_srgba().green, ac.to_srgba().blue, 0.40)
-                } else {
-                    Color::srgb(0.22, 0.25, 0.30)
-                };
-                border.color = default_color;
-            }
+    if let Ok(drag_val) = query.get(entity) {
+        if let Ok(mut border) = border_query.get_mut(entity) {
+            border.color = drag_value_default_border(drag_val);
         }
+    }
+}
+
+fn step_drag_value_arrow<F: bevy::ecs::query::QueryFilter>(
+    trigger: &On<PointerClick>,
+    sign: f32,
+    arrow_query: &Query<Entity, F>,
+    drag_val_query: &mut Query<(Entity, &mut LumaDragValue)>,
+    children_query: &Query<&Children>,
+    parents_query: &Query<&ChildOf>,
+    text_query: &mut Query<&mut UText, With<LumaDragValueText>>,
+    fill_query: &mut Query<&mut UNode, With<LumaDragValueFill>>,
+    commands: &mut Commands,
+) {
+    if !is_primary_click(trigger) {
+        return;
+    }
+    let Some(arrow_entity) = find_ancestor_or_self(trigger.entity, arrow_query, parents_query) else {
+        return;
+    };
+    let Some(root_entity) = find_ancestor_or_self(arrow_entity, drag_val_query, parents_query) else {
+        return;
+    };
+
+    if let Ok((entity, mut drag_val)) = drag_val_query.get_mut(root_entity) {
+        if drag_val.disabled {
+            return;
+        }
+        let step = drag_val.step.unwrap_or_else(|| (drag_val.speed * 5.0).max(0.1));
+        apply_drag_delta_and_emit(
+            entity,
+            &mut drag_val,
+            sign * step,
+            commands,
+            children_query,
+            text_query,
+            fill_query,
+        );
     }
 }
 
@@ -878,37 +921,17 @@ fn on_drag_value_decr_click(
     mut fill_query: Query<&mut UNode, With<LumaDragValueFill>>,
     mut commands: Commands,
 ) {
-    if trigger.event().button != PointerButton::Primary {
-        return;
-    }
-    let target = if decr_query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| decr_query.contains(e))
-    };
-    let Some(decr_entity) = target else {
-        return;
-    };
-    let Some(root_entity) = parents_query.iter_ancestors(decr_entity).find(|&e| drag_val_query.contains(e)) else {
-        return;
-    };
-
-    if let Ok((entity, mut drag_val)) = drag_val_query.get_mut(root_entity) {
-        let step = drag_val.step.unwrap_or(drag_val.speed * 5.0);
-        let speed = drag_val.speed;
-        if drag_val.apply_delta(-step / speed) {
-            let new_text = drag_val.formatted_text();
-            let new_val = drag_val.value;
-            let ratio = drag_val.ratio();
-
-            sync_drag_value_visuals(entity, &new_text, ratio, &children_query, &mut text_query, &mut fill_query);
-
-            commands.trigger(DragValueChanged {
-                entity,
-                value: new_val,
-            });
-        }
-    }
+    step_drag_value_arrow(
+        &trigger,
+        -1.0,
+        &decr_query,
+        &mut drag_val_query,
+        &children_query,
+        &parents_query,
+        &mut text_query,
+        &mut fill_query,
+        &mut commands,
+    );
 }
 
 fn on_drag_value_incr_click(
@@ -921,36 +944,51 @@ fn on_drag_value_incr_click(
     mut fill_query: Query<&mut UNode, With<LumaDragValueFill>>,
     mut commands: Commands,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    step_drag_value_arrow(
+        &trigger,
+        1.0,
+        &incr_query,
+        &mut drag_val_query,
+        &children_query,
+        &parents_query,
+        &mut text_query,
+        &mut fill_query,
+        &mut commands,
+    );
+}
+
+fn keyboard_drag_value_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut LumaDragValue), With<UFocused>>,
+    children_query: Query<&Children>,
+    mut text_query: Query<&mut UText, With<LumaDragValueText>>,
+    mut fill_query: Query<&mut UNode, With<LumaDragValueFill>>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+    let decr = keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::ArrowDown);
+    let incr = keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::ArrowUp);
+    if !decr && !incr {
         return;
     }
-    let target = if incr_query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| incr_query.contains(e))
-    };
-    let Some(incr_entity) = target else {
-        return;
-    };
-    let Some(root_entity) = parents_query.iter_ancestors(incr_entity).find(|&e| drag_val_query.contains(e)) else {
-        return;
-    };
 
-    if let Ok((entity, mut drag_val)) = drag_val_query.get_mut(root_entity) {
-        let step = drag_val.step.unwrap_or(drag_val.speed * 5.0);
-        let speed = drag_val.speed;
-        if drag_val.apply_delta(step / speed) {
-            let new_text = drag_val.formatted_text();
-            let new_val = drag_val.value;
-            let ratio = drag_val.ratio();
-
-            sync_drag_value_visuals(entity, &new_text, ratio, &children_query, &mut text_query, &mut fill_query);
-
-            commands.trigger(DragValueChanged {
-                entity,
-                value: new_val,
-            });
+    let sign = if incr { 1.0 } else { -1.0 };
+    for (entity, mut drag_val) in query.iter_mut() {
+        if drag_val.disabled {
+            continue;
         }
+        let step = drag_val.step.unwrap_or_else(|| (drag_val.speed * 5.0).max(0.1));
+        apply_drag_delta_and_emit(
+            entity,
+            &mut drag_val,
+            sign * step,
+            &mut commands,
+            &children_query,
+            &mut text_query,
+            &mut fill_query,
+        );
     }
 }
 
@@ -972,6 +1010,7 @@ impl Plugin for LumaDragValuePlugin {
             .add_observer(on_drag_value_hover)
             .add_observer(on_drag_value_out)
             .add_observer(on_drag_value_decr_click)
-            .add_observer(on_drag_value_incr_click);
+            .add_observer(on_drag_value_incr_click)
+            .add_systems(Update, keyboard_drag_value_system);
     }
 }

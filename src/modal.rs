@@ -1,11 +1,11 @@
 //! Modal dialog overlay with backdrop and action buttons.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
 use crate::button::{luma_button, ButtonSize, ButtonVariant};
+use crate::helpers::{find_ancestor_or_self, is_primary_click};
 
 /// Marker component for the modal backdrop overlay.
 #[derive(Component, Clone, Debug, Default, Reflect)]
@@ -192,6 +192,37 @@ pub fn luma_modal_dialog(
         .font(font)
 }
 
+fn resolve_modal_interaction(
+    target: Entity,
+    allow_backdrop: bool,
+    commands: &mut Commands,
+    modal_query: &Query<Entity, With<LumaModal>>,
+    confirm_query: &Query<Entity, With<LumaModalConfirm>>,
+    cancel_query: &Query<Entity, With<LumaModalCancel>>,
+    parents_query: &Query<&ChildOf>,
+) {
+    let Some(modal_entity) = find_ancestor_or_self(target, modal_query, parents_query) else {
+        return;
+    };
+
+    if find_ancestor_or_self(target, confirm_query, parents_query).is_some() {
+        commands.trigger(ModalConfirmed(modal_entity));
+        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
+            entity_cmd.try_despawn();
+        }
+    } else if find_ancestor_or_self(target, cancel_query, parents_query).is_some() {
+        commands.trigger(ModalCancelled(modal_entity));
+        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
+            entity_cmd.try_despawn();
+        }
+    } else if allow_backdrop && modal_query.contains(target) {
+        commands.trigger(ModalCancelled(modal_entity));
+        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
+            entity_cmd.try_despawn();
+        }
+    }
+}
+
 fn on_modal_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
@@ -200,44 +231,54 @@ fn on_modal_click(
     cancel_query: Query<Entity, With<LumaModalCancel>>,
     parents_query: Query<&ChildOf>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
 
-    let clicked = trigger.entity;
+    resolve_modal_interaction(
+        trigger.entity,
+        true,
+        &mut commands,
+        &modal_query,
+        &confirm_query,
+        &cancel_query,
+        &parents_query,
+    );
+}
 
-    // 1. Check if clicked Confirm button
-    let is_confirm = confirm_query.contains(clicked)
-        || parents_query.iter_ancestors(clicked).any(|e| confirm_query.contains(e));
+fn on_modal_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    modal_query: Query<Entity, With<LumaModal>>,
+    confirm_query: Query<Entity, With<LumaModalConfirm>>,
+    cancel_query: Query<Entity, With<LumaModalCancel>>,
+    parents_query: Query<&ChildOf>,
+) {
+    resolve_modal_interaction(
+        trigger.entity,
+        false,
+        &mut commands,
+        &modal_query,
+        &confirm_query,
+        &cancel_query,
+        &parents_query,
+    );
+}
 
-    // 2. Check if clicked Cancel button
-    let is_cancel = cancel_query.contains(clicked)
-        || parents_query.iter_ancestors(clicked).any(|e| cancel_query.contains(e));
-
-    // 3. Find parent modal entity
-    let modal_target = if modal_query.contains(clicked) {
-        Some(clicked)
-    } else {
-        parents_query.iter_ancestors(clicked).find(|&e| modal_query.contains(e))
+fn close_modal_on_escape(
+    mut commands: Commands,
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    modal_query: Query<Entity, With<LumaModal>>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
     };
-
-    let Some(modal_entity) = modal_target else { return; };
-
-    if is_confirm {
-        commands.trigger(ModalConfirmed(modal_entity));
-        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
-            entity_cmd.despawn();
-        }
-    } else if is_cancel {
-        commands.trigger(ModalCancelled(modal_entity));
-        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
-            entity_cmd.despawn();
-        }
-    } else if modal_query.contains(clicked) {
-        // Direct click on the backdrop (outside dialog)
-        commands.trigger(ModalCancelled(modal_entity));
-        if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
-            entity_cmd.despawn();
+    if keyboard.just_pressed(KeyCode::Escape) {
+        for modal_entity in modal_query.iter() {
+            commands.trigger(ModalCancelled(modal_entity));
+            if let Ok(mut entity_cmd) = commands.get_entity(modal_entity) {
+                entity_cmd.try_despawn();
+            }
         }
     }
 }
@@ -251,6 +292,8 @@ impl Plugin for LumaModalPlugin {
             .register_type::<LumaModalDialog>()
             .register_type::<LumaModalConfirm>()
             .register_type::<LumaModalCancel>()
-            .add_observer(on_modal_click);
+            .add_observer(on_modal_click)
+            .add_observer(on_modal_activate)
+            .add_systems(Update, close_modal_on_escape);
     }
 }

@@ -1,17 +1,22 @@
 //! Animated toggle switch widget.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
-use crate::theme::ToggleStyle;
+use crate::helpers::{
+    dim_color, find_target_with_children, interaction_colors, is_primary_click, shift_brightness,
+    sync_focus_visual_border,
+};
+use crate::theme::{ToggleStyle, WidgetColors};
 
 /// Marker and state component for a toggle switch.
 #[derive(Component, Clone, Debug, Reflect)]
 pub struct LumaToggle {
     pub is_checked: bool,
     pub disabled: bool,
+    pub style: ToggleStyle,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaToggle {
@@ -19,15 +24,29 @@ impl Default for LumaToggle {
         Self {
             is_checked: false,
             disabled: false,
+            style: ToggleStyle::default(),
+            has_explicit_style: false,
         }
     }
 }
 
 /// Component attached to the sliding knob inside a toggle.
-#[derive(Component, Clone, Debug, Reflect, Default)]
+#[derive(Component, Clone, Debug, Reflect)]
 pub struct LumaToggleKnob {
     pub current_offset: f32,
     pub target_offset: f32,
+    pub travel_distance: f32,
+}
+
+impl Default for LumaToggleKnob {
+    fn default() -> Self {
+        let s = ToggleStyle::default();
+        Self {
+            current_offset: 0.0,
+            target_offset: 0.0,
+            travel_distance: (s.track_width - s.knob_size - 4.0).max(0.0),
+        }
+    }
 }
 
 /// Event triggered when a toggle's state changes.
@@ -36,16 +55,6 @@ pub struct ToggleChanged {
     pub entity: Entity,
     pub is_checked: bool,
 }
-
-const TRACK_WIDTH: f32 = 44.0;
-const TRACK_HEIGHT: f32 = 24.0;
-const KNOB_SIZE: f32 = 20.0;
-const TRAVEL_DISTANCE: f32 = TRACK_WIDTH - KNOB_SIZE - 4.0; // 20.0px
-
-const CHECKED_BG: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
-const UNCHECKED_BG: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
-const CHECKED_BORDER: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
-const UNCHECKED_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
 
 /// Declarative Toggle switch widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]
@@ -103,53 +112,68 @@ impl Toggle {
     }
 }
 
+pub(crate) fn toggle_interaction_colors(style: &ToggleStyle, is_checked: bool, disabled: bool) -> (Color, Color, UInteractionColors) {
+    let palette = WidgetColors::default();
+    if disabled {
+        let bg = palette.disabled_bg();
+        let border = palette.disabled_border();
+        return (bg, border, interaction_colors(bg, bg, bg, true));
+    }
+
+    let bg = if is_checked { style.checked_bg } else { style.unchecked_bg };
+    let border = if is_checked { style.checked_border } else { style.unchecked_border };
+    let (hovered, pressed) = if is_checked {
+        if style.checked_bg == palette.primary {
+            (palette.primary_hover, palette.primary_pressed)
+        } else {
+            (shift_brightness(style.checked_bg, 0.08), shift_brightness(style.checked_bg, -0.08))
+        }
+    } else if style.unchecked_bg == palette.surface {
+        (palette.surface_hover, palette.secondary_pressed)
+    } else {
+        (shift_brightness(style.unchecked_bg, 0.06), shift_brightness(style.unchecked_bg, -0.06))
+    };
+    (bg, border, interaction_colors(bg, hovered, pressed, false))
+}
+
 impl Scene for Toggle {
     fn resolve(
         self,
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let (track_w, track_h, knob_sz, rad, chk_bg, unchk_bg, chk_bdr, unchk_bdr, knob_col) =
-            if let Some(ref s) = self.style {
-                (
-                    s.track_width,
-                    s.track_height,
-                    s.knob_size,
-                    s.radius,
-                    s.checked_bg,
-                    s.unchecked_bg,
-                    s.checked_border,
-                    s.unchecked_border,
-                    s.knob_color,
-                )
-            } else {
-                (
-                    TRACK_WIDTH,
-                    TRACK_HEIGHT,
-                    KNOB_SIZE,
-                    12.0,
-                    CHECKED_BG,
-                    UNCHECKED_BG,
-                    CHECKED_BORDER,
-                    UNCHECKED_BORDER,
-                    Color::WHITE,
-                )
-            };
-
-        let travel = track_w - knob_sz - 4.0;
+        let has_explicit_style = self.style.is_some();
+        let style = self.style.unwrap_or_default();
+        let track_w = style.track_width;
+        let track_h = style.track_height;
+        let knob_sz = style.knob_size;
+        let rad = style.radius;
+        let travel = (track_w - knob_sz - 4.0).max(0.0);
         let initial_offset = if self.is_checked { travel } else { 0.0 };
-        let bg = if self.is_checked { chk_bg } else { unchk_bg };
-        let border = if self.is_checked { chk_bdr } else { unchk_bdr };
-        let bg_hover = if self.is_checked { Color::srgb(0.28, 0.55, 1.00) } else { Color::srgb(0.24, 0.28, 0.36) };
-        let bg_pressed = if self.is_checked { Color::srgb(0.14, 0.35, 0.75) } else { Color::srgb(0.12, 0.15, 0.20) };
+
+        let palette = WidgetColors::default();
         let is_checked = self.is_checked;
         let disabled = self.disabled;
+        let (bg, border, i_colors) = toggle_interaction_colors(&style, is_checked, disabled);
+        let knob_col = if disabled {
+            dim_color(style.knob_color, 0.45)
+        } else {
+            style.knob_color
+        };
+        let label_color = if disabled {
+            palette.disabled_text()
+        } else {
+            palette.text_primary
+        };
+        let focus_color = palette.focus_ring();
         let font = self.font;
 
         let switch_node = bsn! {
             LumaToggle {
                 is_checked,
                 disabled,
+                style,
+                has_explicit_style,
             }
             UNode {
                 width: UVal::Px(track_w),
@@ -164,13 +188,12 @@ impl Scene for Toggle {
                 radius: UCornerRadius::all(rad),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: bg,
-                hovered: bg_hover,
-                pressed: bg_pressed,
+            i_colors
+            UFocusable {
+                enabled: { !disabled },
+                ..UFocusable::new()
             }
-            UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            UFocusVisual::border(focus_color, 2.0)
             ULayout {
                 display: UDisplay::Flex,
                 flex_direction: UFlexDirection::Row,
@@ -180,6 +203,7 @@ impl Scene for Toggle {
                 LumaToggleKnob {
                     current_offset: initial_offset,
                     target_offset: initial_offset,
+                    travel_distance: travel,
                 }
                 UNode {
                     width: UVal::Px(knob_sz),
@@ -211,7 +235,7 @@ impl Scene for Toggle {
                         text: label_text,
                         font_size: 14.0,
                         font,
-                        color: Color::srgb(0.90, 0.92, 0.96),
+                        color: label_color,
                     }
                 ]
             };
@@ -249,7 +273,7 @@ fn toggle_state(
     )>,
     knob_query: &mut Query<&mut LumaToggleKnob>,
 ) {
-    if let Ok((mut toggle, mut node, mut border, children, mut visual_opt, mut colors_opt)) = query.get_mut(entity) {
+    if let Ok((mut toggle, mut node, mut border, children, visual_opt, colors_opt)) = query.get_mut(entity) {
         if toggle.disabled {
             return;
         }
@@ -257,37 +281,19 @@ fn toggle_state(
         toggle.is_checked = !toggle.is_checked;
         let is_checked = toggle.is_checked;
 
-        node.background_color = if is_checked { CHECKED_BG } else { UNCHECKED_BG };
-        let new_border = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+        let (new_bg, new_border, new_i_colors) =
+            toggle_interaction_colors(&toggle.style, is_checked, false);
+        node.background_color = new_bg;
 
-        if let Some(ref mut colors) = colors_opt {
-            if is_checked {
-                colors.normal = CHECKED_BG;
-                colors.hovered = Color::srgb(0.28, 0.55, 1.00);
-                colors.pressed = Color::srgb(0.14, 0.35, 0.75);
-            } else {
-                colors.normal = UNCHECKED_BG;
-                colors.hovered = Color::srgb(0.24, 0.28, 0.36);
-                colors.pressed = Color::srgb(0.12, 0.15, 0.20);
-            }
+        if let Some(mut colors) = colors_opt {
+            *colors = new_i_colors;
         }
-
-        if let Some(ref mut visual) = visual_opt {
-            if visual.is_captured() {
-                visual.set_original_border_color(new_border);
-            } else {
-                border.color = new_border;
-            }
-        } else {
-            border.color = new_border;
-        }
-
-        let target_offset = if is_checked { TRAVEL_DISTANCE } else { 0.0 };
+        sync_focus_visual_border(visual_opt, &mut border, new_border);
 
         if let Some(children) = children {
             for child in children.iter() {
                 if let Ok(mut knob) = knob_query.get_mut(child) {
-                    knob.target_offset = target_offset;
+                    knob.target_offset = if is_checked { knob.travel_distance } else { 0.0 };
                 }
             }
         }
@@ -314,19 +320,10 @@ fn on_toggle_click(
     parents_query: Query<&ChildOf>,
     children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e)) {
-        Some(ancestor)
-    } else if let Ok(children) = children_query.get(trigger.entity) {
-        children.iter().find(|&e| query.contains(e))
-    } else {
-        None
-    };
-    if let Some(entity) = target {
+    if let Some(entity) = find_target_with_children(trigger.entity, &query, &parents_query, &children_query) {
         toggle_state(entity, &mut commands, &mut query, &mut knob_query);
     }
 }
@@ -346,16 +343,7 @@ fn on_toggle_activate(
     parents_query: Query<&ChildOf>,
     children_query: Query<&Children>,
 ) {
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e)) {
-        Some(ancestor)
-    } else if let Ok(children) = children_query.get(trigger.entity) {
-        children.iter().find(|&e| query.contains(e))
-    } else {
-        None
-    };
-    if let Some(entity) = target {
+    if let Some(entity) = find_target_with_children(trigger.entity, &query, &parents_query, &children_query) {
         toggle_state(entity, &mut commands, &mut query, &mut knob_query);
     }
 }

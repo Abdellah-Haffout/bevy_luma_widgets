@@ -1,17 +1,19 @@
 //! Standard interactive list item widget with leading icon, title, subtitle, and trailing action.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
-use crate::theme::ListItemStyle;
+use crate::helpers::{find_ancestor_or_self, interaction_colors, is_primary_click};
+use crate::theme::{ListItemStyle, WidgetColors};
 
 /// Marker and state component for an interactive list item.
 #[derive(Component, Clone, Debug, Reflect)]
 pub struct LumaListItem {
     pub is_selected: bool,
     pub disabled: bool,
+    pub style: ListItemStyle,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaListItem {
@@ -19,9 +21,19 @@ impl Default for LumaListItem {
         Self {
             is_selected: false,
             disabled: false,
+            style: ListItemStyle::default(),
+            has_explicit_style: false,
         }
     }
 }
+
+/// Marker component for the primary title text inside a list item.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaListItemTitle;
+
+/// Marker component for the subtitle / trailing muted text inside a list item.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaListItemSubtitle;
 
 /// Event triggered when a list item is clicked.
 #[derive(Event, Clone, Copy, Debug)]
@@ -119,7 +131,9 @@ impl Scene for ListItem {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let has_explicit_style = self.style.is_some();
         let style = self.style.unwrap_or_default();
+        let colors = WidgetColors::default();
 
         let has_leading = self.leading_icon.is_some();
         let leading_text = self.leading_icon.unwrap_or_default();
@@ -139,7 +153,9 @@ impl Scene for ListItem {
         let font = self.font;
         let icon_font = self.icon_font;
 
-        let bg_normal = if is_selected {
+        let bg_normal = if disabled {
+            colors.disabled_bg()
+        } else if is_selected {
             style.bg_pressed
         } else {
             style.bg_normal
@@ -148,20 +164,34 @@ impl Scene for ListItem {
         let min_height = style.min_height;
         let radius = style.radius;
         let padding = style.padding;
-        let border_color = style.border_color;
+        let border_color = if disabled {
+            colors.disabled_border()
+        } else {
+            style.border_color
+        };
         let border_width = style.border_width;
-        let bg_hover = style.bg_hover;
-        let bg_pressed = style.bg_pressed;
+        let item_colors = interaction_colors(bg_normal, style.bg_hover, style.bg_pressed, disabled);
         let font_size = style.font_size;
         let subtitle_font_size = style.subtitle_font_size;
-        let title_color = style.title_color;
-        let subtitle_color = style.subtitle_color;
+        let title_color = if disabled {
+            colors.disabled_text()
+        } else {
+            style.title_color
+        };
+        let subtitle_color = if disabled {
+            colors.disabled_text()
+        } else {
+            style.subtitle_color
+        };
+        let luma_item = LumaListItem {
+            is_selected,
+            disabled,
+            style,
+            has_explicit_style,
+        };
 
         let s = bsn! {
-            LumaListItem {
-                is_selected,
-                disabled,
-            }
+            luma_item
             UNode {
                 width: UVal::Percent(1.0),
                 min_height,
@@ -175,13 +205,12 @@ impl Scene for ListItem {
                 radius: UCornerRadius::all(radius),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: bg_normal,
-                hovered: bg_hover,
-                pressed: bg_pressed,
+            item_colors
+            UFocusable {
+                enabled: { !disabled },
+                ..UFocusable::default()
             }
-            UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            UFocusVisual::border(colors.focus_ring(), 2.0)
             ULayout {
                 display: UDisplay::Flex,
                 flex_direction: UFlexDirection::Row,
@@ -204,6 +233,7 @@ impl Scene for ListItem {
                         display: { if has_leading { UDisplay::Flex } else { UDisplay::None } },
                     }
                     Children [
+                        LumaListItemSubtitle
                         UText {
                             text: leading_text,
                             font_size: 18.0,
@@ -219,6 +249,7 @@ impl Scene for ListItem {
                         gap: 2.0,
                     }
                     Children [
+                        LumaListItemTitle
                         UText {
                             text: title,
                             font_size,
@@ -231,10 +262,11 @@ impl Scene for ListItem {
                             display: { if has_subtitle { UDisplay::Flex } else { UDisplay::None } },
                         }
                         Children [
+                            LumaListItemSubtitle
                             UText {
                                 text: subtitle_text,
                                 font_size: subtitle_font_size,
-                                font,
+                                font: { font.clone() },
                                 color: subtitle_color,
                             }
                         ]
@@ -255,10 +287,11 @@ impl Scene for ListItem {
                         display: { if has_trailing_text { UDisplay::Flex } else { UDisplay::None } },
                     }
                     Children [
+                        LumaListItemSubtitle
                         UText {
                             text: trailing_text,
                             font_size: subtitle_font_size,
-                            font: Handle::default(),
+                            font,
                             color: subtitle_color,
                         }
                     ]
@@ -268,6 +301,7 @@ impl Scene for ListItem {
                         display: { if has_trailing_icon { UDisplay::Flex } else { UDisplay::None } },
                     }
                     Children [
+                        LumaListItemSubtitle
                         UText {
                             text: trailing_icon_text,
                             font_size: 16.0,
@@ -288,20 +322,41 @@ pub fn luma_list_item(title: impl Into<String>) -> ListItem {
     ListItem::new(title)
 }
 
-fn list_item_click_observer(
-    trigger: On<PointerClick>,
-    query: Query<&LumaListItem>,
-    mut commands: Commands,
+fn activate_list_item(
+    target: Entity,
+    query: &Query<&LumaListItem>,
+    parents_query: &Query<&ChildOf>,
+    commands: &mut Commands,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    let Some(entity) = find_ancestor_or_self(target, query, parents_query) else {
         return;
-    }
-    let entity = trigger.entity;
+    };
     if let Ok(item) = query.get(entity) {
         if !item.disabled {
             commands.trigger(ListItemClicked(entity));
         }
     }
+}
+
+fn list_item_click_observer(
+    trigger: On<PointerClick>,
+    query: Query<&LumaListItem>,
+    parents_query: Query<&ChildOf>,
+    mut commands: Commands,
+) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    activate_list_item(trigger.entity, &query, &parents_query, &mut commands);
+}
+
+fn list_item_activate_observer(
+    trigger: On<UFocusActivate>,
+    query: Query<&LumaListItem>,
+    parents_query: Query<&ChildOf>,
+    mut commands: Commands,
+) {
+    activate_list_item(trigger.entity, &query, &parents_query, &mut commands);
 }
 
 /// Plugin registering list item systems and observers.
@@ -310,6 +365,9 @@ pub struct LumaListItemPlugin;
 impl Plugin for LumaListItemPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaListItem>()
-            .add_observer(list_item_click_observer);
+            .register_type::<LumaListItemTitle>()
+            .register_type::<LumaListItemSubtitle>()
+            .add_observer(list_item_click_observer)
+            .add_observer(list_item_activate_observer);
     }
 }

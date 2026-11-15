@@ -1,15 +1,22 @@
 //! Checkbox widget with checkmark indicator and label support.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{
+    find_target_with_children, interaction_colors, is_primary_click, shift_brightness,
+    sync_focus_visual_border,
+};
+use crate::theme::{CheckboxStyle, WidgetColors};
 
 /// Marker and state component for a checkbox.
 #[derive(Component, Clone, Debug, Reflect)]
 pub struct LumaCheckbox {
     pub is_checked: bool,
     pub disabled: bool,
+    pub style: CheckboxStyle,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaCheckbox {
@@ -17,6 +24,8 @@ impl Default for LumaCheckbox {
         Self {
             is_checked: false,
             disabled: false,
+            style: CheckboxStyle::default(),
+            has_explicit_style: false,
         }
     }
 }
@@ -32,11 +41,6 @@ pub struct CheckboxChanged {
     pub is_checked: bool,
 }
 
-const CHECKED_BG: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
-const UNCHECKED_BG: Color = Color::srgb_u8(0x12, 0x12, 0x14);
-const CHECKED_BORDER: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
-const UNCHECKED_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
-
 /// Declarative Checkbox widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]
 pub struct Checkbox {
@@ -45,6 +49,7 @@ pub struct Checkbox {
     pub disabled: bool,
     pub font: Handle<Font>,
     pub icon_font: Handle<Font>,
+    pub style: Option<CheckboxStyle>,
 }
 
 impl Default for Checkbox {
@@ -55,6 +60,7 @@ impl Default for Checkbox {
             disabled: false,
             font: Handle::default(),
             icon_font: Handle::default(),
+            style: None,
         }
     }
 }
@@ -99,6 +105,41 @@ impl Checkbox {
         self.icon_font = icon_font;
         self
     }
+
+    pub fn style(mut self, style: CheckboxStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
+}
+
+pub(crate) fn checkbox_visual_state(
+    style: &CheckboxStyle,
+    is_checked: bool,
+    disabled: bool,
+) -> (Color, Color, Color, UInteractionColors) {
+    let palette = WidgetColors::default();
+    if disabled {
+        let bg = palette.disabled_bg();
+        let border = palette.disabled_border();
+        let icon = if is_checked { palette.disabled_text() } else { Color::NONE };
+        return (bg, border, icon, interaction_colors(bg, bg, bg, true));
+    }
+
+    let bg = if is_checked { style.checked_bg } else { style.unchecked_bg };
+    let border = if is_checked { style.checked_border } else { style.unchecked_border };
+    let icon = if is_checked { style.check_color } else { Color::NONE };
+    let (hovered, pressed) = if is_checked {
+        if style.checked_bg == palette.primary {
+            (palette.primary_hover, palette.primary_pressed)
+        } else {
+            (shift_brightness(style.checked_bg, 0.08), shift_brightness(style.checked_bg, -0.08))
+        }
+    } else if style.unchecked_bg == palette.surface {
+        (palette.surface_hover, palette.secondary_pressed)
+    } else {
+        (shift_brightness(style.unchecked_bg, 0.06), shift_brightness(style.unchecked_bg, -0.06))
+    };
+    (bg, border, icon, interaction_colors(bg, hovered, pressed, false))
 }
 
 impl Scene for Checkbox {
@@ -107,41 +148,48 @@ impl Scene for Checkbox {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let bg = if self.is_checked { CHECKED_BG } else { UNCHECKED_BG };
-        let border = if self.is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
-        let icon_color = if self.is_checked { Color::WHITE } else { Color::NONE };
-
+        let has_explicit_style = self.style.is_some();
+        let style = self.style.unwrap_or_default();
         let is_checked = self.is_checked;
         let disabled = self.disabled;
         let icon_font = self.icon_font;
         let font = self.font;
-        let bg_hover = if self.is_checked { Color::srgb(0.28, 0.55, 1.00) } else { Color::srgb(0.24, 0.28, 0.36) };
-        let bg_pressed = if self.is_checked { Color::srgb(0.14, 0.35, 0.75) } else { Color::srgb(0.12, 0.15, 0.20) };
+
+        let palette = WidgetColors::default();
+        let (bg, border, icon_color, i_colors) = checkbox_visual_state(&style, is_checked, disabled);
+        let label_color = if disabled { palette.disabled_text() } else { style.label_color };
+        let focus_color = palette.focus_ring();
+        let box_size = style.size;
+        let box_radius = style.radius;
+        let border_width = style.border_width;
+        let label_font_size = style.font_size;
+        let icon_font_size = (box_size * 0.65).max(11.0);
 
         let box_node = bsn! {
             LumaCheckbox {
                 is_checked,
                 disabled,
+                style,
+                has_explicit_style,
             }
             UNode {
-                width: UVal::Px(20.0),
-                height: UVal::Px(20.0),
+                width: UVal::Px(box_size),
+                height: UVal::Px(box_size),
                 background_color: bg,
-                border_radius: UCornerRadius::all(5.0),
+                border_radius: UCornerRadius::all(box_radius),
             }
             UBorder {
                 color: border,
-                width: 1.5,
-                radius: UCornerRadius::all(5.0),
+                width: border_width,
+                radius: UCornerRadius::all(box_radius),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: bg,
-                hovered: bg_hover,
-                pressed: bg_pressed,
+            i_colors
+            UFocusable {
+                enabled: { !disabled },
+                ..UFocusable::new()
             }
-            UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            UFocusVisual::border(focus_color, 2.0)
             ULayout {
                 display: UDisplay::Flex,
                 justify_content: UJustifyContent::Center,
@@ -151,7 +199,7 @@ impl Scene for Checkbox {
                 LumaCheckmark
                 UText {
                     text: { Icon::CHECK.to_string() },
-                    font_size: 13.0,
+                    font_size: icon_font_size,
                     font: icon_font,
                     color: icon_color,
                 }
@@ -173,9 +221,9 @@ impl Scene for Checkbox {
                     --
                     UText {
                         text: label_text,
-                        font_size: 14.0,
+                        font_size: label_font_size,
                         font,
-                        color: Color::srgb(0.92, 0.94, 0.98),
+                        color: label_color,
                     }
                 ]
             };
@@ -214,7 +262,7 @@ fn toggle_checkbox(
     )>,
     text_query: &mut Query<&mut UText, With<LumaCheckmark>>,
 ) {
-    if let Ok((mut checkbox, mut node, mut border, children, mut visual_opt, mut colors_opt)) = query.get_mut(entity) {
+    if let Ok((mut checkbox, mut node, mut border, children, visual_opt, colors_opt)) = query.get_mut(entity) {
         if checkbox.disabled {
             return;
         }
@@ -222,32 +270,14 @@ fn toggle_checkbox(
         checkbox.is_checked = !checkbox.is_checked;
         let is_checked = checkbox.is_checked;
 
-        node.background_color = if is_checked { CHECKED_BG } else { UNCHECKED_BG };
-        let new_border = if is_checked { CHECKED_BORDER } else { UNCHECKED_BORDER };
+        let (new_bg, new_border, icon_color, new_colors) =
+            checkbox_visual_state(&checkbox.style, is_checked, false);
+        node.background_color = new_bg;
 
-        if let Some(ref mut colors) = colors_opt {
-            if is_checked {
-                colors.normal = CHECKED_BG;
-                colors.hovered = Color::srgb(0.28, 0.55, 1.00);
-                colors.pressed = Color::srgb(0.14, 0.35, 0.75);
-            } else {
-                colors.normal = UNCHECKED_BG;
-                colors.hovered = Color::srgb(0.24, 0.28, 0.36);
-                colors.pressed = Color::srgb(0.12, 0.15, 0.20);
-            }
+        if let Some(mut colors) = colors_opt {
+            *colors = new_colors;
         }
-
-        if let Some(ref mut visual) = visual_opt {
-            if visual.is_captured() {
-                visual.set_original_border_color(new_border);
-            } else {
-                border.color = new_border;
-            }
-        } else {
-            border.color = new_border;
-        }
-
-        let icon_color = if is_checked { Color::WHITE } else { Color::NONE };
+        sync_focus_visual_border(visual_opt, &mut border, new_border);
 
         if let Some(children) = children {
             for child in children.iter() {
@@ -279,19 +309,10 @@ fn on_checkbox_click(
     parents_query: Query<&ChildOf>,
     children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e)) {
-        Some(ancestor)
-    } else if let Ok(children) = children_query.get(trigger.entity) {
-        children.iter().find(|&e| query.contains(e))
-    } else {
-        None
-    };
-    if let Some(entity) = target {
+    if let Some(entity) = find_target_with_children(trigger.entity, &query, &parents_query, &children_query) {
         toggle_checkbox(entity, &mut commands, &mut query, &mut text_query);
     }
 }
@@ -311,16 +332,7 @@ fn on_checkbox_activate(
     parents_query: Query<&ChildOf>,
     children_query: Query<&Children>,
 ) {
-    let target = if query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| query.contains(e)) {
-        Some(ancestor)
-    } else if let Ok(children) = children_query.get(trigger.entity) {
-        children.iter().find(|&e| query.contains(e))
-    } else {
-        None
-    };
-    if let Some(entity) = target {
+    if let Some(entity) = find_target_with_children(trigger.entity, &query, &parents_query, &children_query) {
         toggle_checkbox(entity, &mut commands, &mut query, &mut text_query);
     }
 }

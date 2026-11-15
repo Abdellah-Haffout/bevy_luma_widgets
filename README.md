@@ -6,7 +6,7 @@
 
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-orange?style=flat-square)](https://crates.io/crates/bevy_luma_widgets)
 [![Docs.rs](https://img.shields.io/badge/docs.rs-bevy__luma__widgets-blue?style=flat-square)](https://docs.rs/bevy_luma_widgets)
-[![Bevy](https://img.shields.io/badge/Bevy-0.19-purple?style=flat-square)](https://bevyengine.org)
+[![Bevy](https://img.shields.io/badge/Bevy-0.20-purple?style=flat-square)](https://bevyengine.org)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-green?style=flat-square)](#license)
 
 </div>
@@ -66,7 +66,7 @@ Add `bevy_luma_widgets` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-bevy = "0.19"
+bevy = "0.20"
 bevy_luma_widgets = "0.1.0"
 ```
 
@@ -396,12 +396,12 @@ app.add_observer(|trigger: On<RatingChanged>| {
 
 ```rust
 ({
-    BreadcrumbTrail::new((
-        BreadcrumbItem::new(0, "home", "Home", false).font(font.clone()),
+    luma_breadcrumb_trail((
+        BreadcrumbItem::new("home", "Home").index(0).font(font.clone()),
         BreadcrumbSeparator::new(icon_font.clone()),
-        BreadcrumbItem::new(1, "components", "Components", false).font(font.clone()),
+        BreadcrumbItem::new("components", "Components").index(1).font(font.clone()),
         BreadcrumbSeparator::new(icon_font.clone()),
-        BreadcrumbItem::new(2, "widgets", "Gallery", true).font(font.clone()),
+        BreadcrumbItem::new("widgets", "Gallery").index(2).current(true).font(font.clone()),
     ))
 })
 ```
@@ -418,13 +418,15 @@ app.add_observer(|trigger: On<BreadcrumbClicked>| {
 
 ```rust
 ({
-    SegmentedControl::new(
+    luma_segmented_control(
         "view_mode",
         "analytics",
         (
-            SegmentOption::new("view_mode", "overview", "Overview", false).font(font.clone()),
-            SegmentOption::new("view_mode", "analytics", "Analytics", true).font(font.clone()),
-            SegmentOption::new("view_mode", "settings", "Settings", false).font(font.clone()),
+            SegmentOption::new("view_mode", "overview", "Overview").font(font.clone()),
+            SegmentOption::new("view_mode", "analytics", "Analytics")
+                .active(true)
+                .font(font.clone()),
+            SegmentOption::new("view_mode", "settings", "Settings").font(font.clone()),
         ),
     )
 })
@@ -448,7 +450,7 @@ app.add_observer(|trigger: On<SegmentChanged>| {
 ({ Chip::new("Multi-Threaded").icon(Icon::CPU).font(font.clone()).icon_font(icon_font.clone()) })
 
 // Removable chip with dismiss [x] button
-({ Chip::new("Bevy 0.19").removable(true).font(font.clone()).icon_font(icon_font.clone()) })
+({ Chip::new("Bevy 0.20").removable(true).font(font.clone()).icon_font(icon_font.clone()) })
 ```
 
 Listen for dismiss actions via `ChipDismissed`:
@@ -480,7 +482,7 @@ app.add_observer(|trigger: On<ChipDismissed>| {
         "Temporary notification message",
     )
     .variant(ToastVariant::Info)
-    .duration(5.0)
+    .timed(5.0)
     .font(font.clone())
     .icon_font(icon_font.clone())
 })

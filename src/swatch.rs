@@ -1,9 +1,11 @@
 //! Color swatch widget for palette selection and color previews.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{find_target_with_children, is_primary_click, sync_focus_visual_border};
+use crate::theme::WidgetColors;
 
 /// Marker and state component for a color swatch tile.
 #[derive(Component, Clone, Debug, Reflect)]
@@ -112,12 +114,13 @@ impl Scene for Swatch {
             }
             UInteraction::default()
             UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            UFocusVisual::border(WidgetColors::default().focus_ring(), 2.0)
         };
 
         if let Some(label_str) = self.label {
             let container = bsn! {
                 UNode::default()
+                UInteraction::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
@@ -131,7 +134,7 @@ impl Scene for Swatch {
                         text: label_str,
                         font_size: 13.0,
                         font,
-                        color: Color::srgb(0.85, 0.88, 0.95),
+                        color: { WidgetColors::default().text_primary },
                     }
                 ]
             };
@@ -160,16 +163,17 @@ pub fn luma_swatch_with_label(
 fn toggle_swatch(
     target_entity: Entity,
     commands: &mut Commands,
-    mut query: Query<(Entity, &mut LumaSwatch, &mut UBorder)>,
+    mut query: Query<(Entity, &mut LumaSwatch, &mut UBorder, Option<&mut UFocusVisual>)>,
 ) {
-    if let Ok((entity, mut swatch, mut border)) = query.get_mut(target_entity) {
+    if let Ok((entity, mut swatch, mut border, visual_opt)) = query.get_mut(target_entity) {
         swatch.selected = !swatch.selected;
         let selected = swatch.selected;
-        border.color = if selected {
+        let new_border = if selected {
             SWATCH_SELECTED_BORDER
         } else {
             SWATCH_UNSELECTED_BORDER
         };
+        sync_focus_visual_border(visual_opt, &mut border, new_border);
         border.width = if selected { 2.5 } else { 1.5 };
 
         commands.trigger(SwatchSelected {
@@ -182,20 +186,28 @@ fn toggle_swatch(
 fn on_swatch_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
-    query: Query<(Entity, &mut LumaSwatch, &mut UBorder)>,
+    query: Query<(Entity, &mut LumaSwatch, &mut UBorder, Option<&mut UFocusVisual>)>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
-    toggle_swatch(trigger.entity, &mut commands, query);
+    if let Some(target) = find_target_with_children(trigger.entity, &query, &parents_query, &children_query) {
+        toggle_swatch(target, &mut commands, query);
+    }
 }
 
 fn on_swatch_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
-    query: Query<(Entity, &mut LumaSwatch, &mut UBorder)>,
+    query: Query<(Entity, &mut LumaSwatch, &mut UBorder, Option<&mut UFocusVisual>)>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
 ) {
-    toggle_swatch(trigger.entity, &mut commands, query);
+    if let Some(target) = find_target_with_children(trigger.entity, &query, &parents_query, &children_query) {
+        toggle_swatch(target, &mut commands, query);
+    }
 }
 
 pub struct LumaSwatchPlugin;

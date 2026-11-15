@@ -4,6 +4,9 @@ use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
+use crate::helpers::{find_ancestor_or_self, interaction_colors, is_primary_click};
+use crate::theme::WidgetColors;
+
 /// Marker component for a breadcrumb navigation trail container.
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaBreadcrumb;
@@ -87,9 +90,14 @@ impl Scene for BreadcrumbItem {
         let is_current = self.is_current;
         let font = self.font;
 
+        let colors = WidgetColors::default();
         let text_color = if is_current { CRUMB_COLOR_CURRENT } else { CRUMB_COLOR_NORMAL };
-        let hover_color = if is_current { Color::NONE } else { Color::srgba(1.0, 1.0, 1.0, 0.05) };
-        let pressed_color = if is_current { Color::NONE } else { Color::srgba(1.0, 1.0, 1.0, 0.10) };
+        let crumb_colors = interaction_colors(
+            Color::NONE,
+            Color::srgba(1.0, 1.0, 1.0, 0.05),
+            Color::srgba(1.0, 1.0, 1.0, 0.10),
+            is_current,
+        );
 
         let s = bsn! {
             LumaBreadcrumbItem {
@@ -102,13 +110,12 @@ impl Scene for BreadcrumbItem {
                 border_radius: UCornerRadius::all(4.0),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: Color::NONE,
-                hovered: hover_color,
-                pressed: pressed_color,
+            crumb_colors
+            UFocusable {
+                enabled: { !is_current },
+                ..UFocusable::default()
             }
-            UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
+            UFocusVisual::border(colors.focus_ring(), 1.5)
             ULayout {
                 display: UDisplay::Flex,
                 justify_content: UJustifyContent::Center,
@@ -228,12 +235,15 @@ pub fn luma_breadcrumb_trail(items: impl Scene) -> impl Scene {
     }
 }
 
-fn on_breadcrumb_click(
-    trigger: On<PointerClick>,
-    mut commands: Commands,
-    item_query: Query<&LumaBreadcrumbItem>,
+fn trigger_breadcrumb(
+    target: Entity,
+    commands: &mut Commands,
+    parents_query: &Query<&ChildOf>,
+    item_query: &Query<&LumaBreadcrumbItem>,
 ) {
-    let entity = trigger.entity;
+    let Some(entity) = find_ancestor_or_self(target, item_query, parents_query) else {
+        return;
+    };
     if let Ok(item) = item_query.get(entity) {
         if !item.is_current {
             commands.trigger(BreadcrumbClicked {
@@ -245,21 +255,25 @@ fn on_breadcrumb_click(
     }
 }
 
+fn on_breadcrumb_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    item_query: Query<&LumaBreadcrumbItem>,
+) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    trigger_breadcrumb(trigger.entity, &mut commands, &parents_query, &item_query);
+}
+
 fn on_breadcrumb_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
+    parents_query: Query<&ChildOf>,
     item_query: Query<&LumaBreadcrumbItem>,
 ) {
-    let entity = trigger.entity;
-    if let Ok(item) = item_query.get(entity) {
-        if !item.is_current {
-            commands.trigger(BreadcrumbClicked {
-                entity,
-                index: item.index,
-                value: item.value.clone(),
-            });
-        }
-    }
+    trigger_breadcrumb(trigger.entity, &mut commands, &parents_query, &item_query);
 }
 
 pub struct LumaBreadcrumbPlugin;

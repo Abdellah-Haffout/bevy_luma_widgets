@@ -1,8 +1,9 @@
-use bevy::ecs::relationship::Relationship;
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{find_ancestor_or_self, is_primary_click};
+use crate::theme::WidgetColors;
 
 /// Marker and state component for a segmented control container.
 #[derive(Component, Clone, Debug, Default, Reflect)]
@@ -31,8 +32,26 @@ const SEGMENT_ACTIVE_BG: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
 const SEGMENT_INACTIVE_BG: Color = Color::NONE;
 const SEGMENT_ACTIVE_TEXT: Color = Color::srgb_u8(0x06, 0x22, 0x18);
 const SEGMENT_INACTIVE_TEXT: Color = Color::srgb_u8(0xEC, 0xEC, 0xEE);
+const SEGMENT_HOVER_BG: Color = Color::srgba(1.0, 1.0, 1.0, 0.05);
+const SEGMENT_PRESSED_BG: Color = Color::srgba(1.0, 1.0, 1.0, 0.10);
 const CONTAINER_BG: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
 const CONTAINER_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
+
+fn segment_interaction_colors(is_active: bool) -> UInteractionColors {
+    if is_active {
+        UInteractionColors {
+            normal: SEGMENT_ACTIVE_BG,
+            hovered: SEGMENT_ACTIVE_BG,
+            pressed: SEGMENT_ACTIVE_BG,
+        }
+    } else {
+        UInteractionColors {
+            normal: SEGMENT_INACTIVE_BG,
+            hovered: SEGMENT_HOVER_BG,
+            pressed: SEGMENT_PRESSED_BG,
+        }
+    }
+}
 
 /// Declarative SegmentOption widget struct.
 #[derive(Clone, Debug, Reflect)]
@@ -93,8 +112,10 @@ impl Scene for SegmentOption {
         let is_active = self.is_active;
         let font = self.font;
 
+        let colors = WidgetColors::default();
         let bg = if is_active { SEGMENT_ACTIVE_BG } else { SEGMENT_INACTIVE_BG };
         let text_color = if is_active { SEGMENT_ACTIVE_TEXT } else { SEGMENT_INACTIVE_TEXT };
+        let interaction_colors = segment_interaction_colors(is_active);
 
         let s = bsn! {
             LumaSegmentOption {
@@ -109,13 +130,9 @@ impl Scene for SegmentOption {
                 border_radius: UCornerRadius::all(6.0),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: bg,
-                hovered: { if is_active { SEGMENT_ACTIVE_BG } else { Color::srgba(1.0, 1.0, 1.0, 0.05) } },
-                pressed: { if is_active { SEGMENT_ACTIVE_BG } else { Color::srgba(1.0, 1.0, 1.0, 0.10) } },
-            }
+            interaction_colors
             UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
+            UFocusVisual::border(colors.focus_ring(), 1.5)
             ULayout {
                 display: UDisplay::Flex,
                 justify_content: UJustifyContent::Center,
@@ -242,39 +259,51 @@ pub fn luma_segmented_control(
 }
 
 fn switch_segment(
-    target_entity: Entity,
+    target: Entity,
     commands: &mut Commands,
     parents_query: &Query<&ChildOf>,
-    option_query: &mut Query<(Entity, &mut LumaSegmentOption, &mut UNode, &Children)>,
+    option_query: &mut Query<(Entity, &mut LumaSegmentOption, &mut UNode, Option<&mut UInteractionColors>, &Children)>,
     control_query: &mut Query<&mut LumaSegmentedControl>,
     text_query: &mut Query<&mut UText>,
 ) {
-    let (group, target_value) = if let Ok((_, opt, _, _)) = option_query.get(target_entity) {
-        (opt.group.clone(), opt.value.clone())
-    } else {
+    let Some(target_entity) = find_ancestor_or_self(target, option_query, parents_query) else {
         return;
     };
+    let Ok((_, opt, _, _, _)) = option_query.get(target_entity) else {
+        return;
+    };
+    if opt.is_active {
+        return;
+    }
+    let group = opt.group.clone();
+    let target_value = opt.value.clone();
 
-    // Find parent control container
-    let mut current = target_entity;
-    while let Ok(parent) = parents_query.get(current) {
-        current = parent.get();
-        if let Ok(mut control) = control_query.get_mut(current) {
+    if let Some(ctrl_entity) = find_ancestor_or_self(target_entity, control_query, parents_query) {
+        if let Ok(mut control) = control_query.get_mut(ctrl_entity) {
             if control.group == group {
                 control.active = target_value.clone();
-                break;
             }
         }
     }
 
-    // Update sibling options
-    for (entity, mut option, mut node, children) in option_query.iter_mut() {
+    for (entity, mut option, mut node, colors_opt, children) in option_query.iter_mut() {
         if option.group == group {
             let is_active = entity == target_entity;
             option.is_active = is_active;
-            node.background_color = if is_active { SEGMENT_ACTIVE_BG } else { SEGMENT_INACTIVE_BG };
+            node.background_color = if is_active {
+                SEGMENT_ACTIVE_BG
+            } else {
+                SEGMENT_INACTIVE_BG
+            };
+            if let Some(mut colors) = colors_opt {
+                *colors = segment_interaction_colors(is_active);
+            }
 
-            let text_color = if is_active { SEGMENT_ACTIVE_TEXT } else { SEGMENT_INACTIVE_TEXT };
+            let text_color = if is_active {
+                SEGMENT_ACTIVE_TEXT
+            } else {
+                SEGMENT_INACTIVE_TEXT
+            };
             for child in children.iter() {
                 if let Ok(mut text) = text_query.get_mut(child) {
                     text.color = text_color;
@@ -294,11 +323,11 @@ fn on_segment_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
     parents_query: Query<&ChildOf>,
-    mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, &Children)>,
+    mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, Option<&mut UInteractionColors>, &Children)>,
     mut control_query: Query<&mut LumaSegmentedControl>,
     mut text_query: Query<&mut UText>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
     switch_segment(
@@ -315,7 +344,7 @@ fn on_segment_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
     parents_query: Query<&ChildOf>,
-    mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, &Children)>,
+    mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, Option<&mut UInteractionColors>, &Children)>,
     mut control_query: Query<&mut LumaSegmentedControl>,
     mut text_query: Query<&mut UText>,
 ) {
@@ -335,7 +364,8 @@ fn keyboard_segmented_control_system(
     mut focus_state: Option<ResMut<UFocusState>>,
     focused_query: Query<Entity, With<UFocused>>,
     parents_query: Query<&ChildOf>,
-    mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, &Children)>,
+    children_query: Query<&Children>,
+    mut option_query: Query<(Entity, &mut LumaSegmentOption, &mut UNode, Option<&mut UInteractionColors>, &Children)>,
     mut control_query: Query<&mut LumaSegmentedControl>,
     mut text_query: Query<&mut UText>,
 ) {
@@ -353,16 +383,36 @@ fn keyboard_segmented_control_system(
         return;
     };
 
-    let Ok((_, focused_opt, _, _)) = option_query.get(focused_entity) else {
+    let Ok((_, focused_opt, _, _, _)) = option_query.get(focused_entity) else {
         return;
     };
     let target_group = focused_opt.group.clone();
 
-    let group_entities: Vec<Entity> = option_query
-        .iter()
-        .filter(|(_, opt, _, _)| opt.group == target_group)
-        .map(|(e, _, _, _)| e)
-        .collect();
+    // Prefer parent Children order so ArrowLeft/ArrowRight match visual order.
+    let mut group_entities: Vec<Entity> = parents_query
+        .get(focused_entity)
+        .ok()
+        .and_then(|parent| children_query.get(parent.parent()).ok())
+        .map(|siblings| {
+            siblings
+                .iter()
+                .filter(|&e| {
+                    option_query
+                        .get(e)
+                        .map(|(_, opt, _, _, _)| opt.group == target_group)
+                        .unwrap_or(false)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if group_entities.is_empty() {
+        group_entities = option_query
+            .iter()
+            .filter(|(_, opt, _, _, _)| opt.group == target_group)
+            .map(|(e, _, _, _, _)| e)
+            .collect();
+    }
 
     if group_entities.is_empty() {
         return;
@@ -370,7 +420,11 @@ fn keyboard_segmented_control_system(
 
     if let Some(pos) = group_entities.iter().position(|&e| e == focused_entity) {
         let next_idx = if left {
-            if pos == 0 { group_entities.len() - 1 } else { pos - 1 }
+            if pos == 0 {
+                group_entities.len() - 1
+            } else {
+                pos - 1
+            }
         } else {
             (pos + 1) % group_entities.len()
         };

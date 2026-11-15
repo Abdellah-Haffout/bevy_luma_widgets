@@ -4,13 +4,14 @@ use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
-use crate::theme::SpinnerStyle;
+use crate::theme::{SpinnerStyle, WidgetColors};
 
 /// Component marking an active rotating spinner.
 #[derive(Component, Clone, Debug, Reflect)]
 pub struct LumaSpinner {
     pub speed: f32,
     pub angle: f32,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaSpinner {
@@ -18,6 +19,7 @@ impl Default for LumaSpinner {
         Self {
             speed: 6.0,
             angle: 0.0,
+            has_explicit_style: false,
         }
     }
 }
@@ -35,12 +37,13 @@ pub struct Spinner {
 
 impl Default for Spinner {
     fn default() -> Self {
+        let base = SpinnerStyle::default();
         Self {
-            size: 24.0,
-            color: Color::srgb(0.35, 0.65, 1.00),
-            track_color: Color::srgba(1.0, 1.0, 1.0, 0.15),
-            thickness: 3.0,
-            speed: 6.0,
+            size: base.size,
+            color: WidgetColors::default().primary,
+            track_color: base.track_color,
+            thickness: base.thickness,
+            speed: base.speed,
             style: None,
         }
     }
@@ -100,18 +103,26 @@ impl Scene for Spinner {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let (size, color, thickness, speed) = if let Some(ref s) = self.style {
-            (s.size, s.color, s.thickness, s.speed)
+        let has_explicit_style = self.style.is_some();
+        let (size, color, track_color, thickness, speed) = if let Some(ref s) = self.style {
+            (s.size, s.color, s.track_color, s.thickness, s.speed)
         } else {
-            (self.size, self.color, self.thickness, self.speed)
+            (self.size, self.color, self.track_color, self.thickness, self.speed)
         };
 
         let radius = size / 2.0;
+        let grad = UGradient::angular_stops(vec![
+            UGradientStop::new(0.0, color),
+            UGradientStop::new(0.30, track_color),
+            UGradientStop::new(1.0, track_color),
+        ])
+        .stepped();
 
         let s = bsn! {
             LumaSpinner {
                 speed,
                 angle: 0.0,
+                has_explicit_style,
             }
             UNode {
                 width: UVal::Px(size),
@@ -120,10 +131,11 @@ impl Scene for Spinner {
                 border_radius: UCornerRadius::all(radius),
             }
             UBorder {
-                color,
+                color: Color::NONE,
                 width: thickness,
                 radius: UCornerRadius::all(radius),
             }
+            grad
             ULayout {
                 display: UDisplay::Flex,
                 justify_content: UJustifyContent::Center,

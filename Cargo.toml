@@ -50,6 +50,7 @@ bevy = { version = "0.20.0", default-features = false, features = [
     "bevy_scene",
 ] }
 bevy_luma = { version = "0.1.0", path = "../bevy_luma" }
+serde = { version = "1.0", features = ["derive"] }
 
 [[example]]
 name = "widgets_gallery"

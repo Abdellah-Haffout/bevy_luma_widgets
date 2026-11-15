@@ -1,7 +1,11 @@
 //! Tabbed navigation widget for organizing content into multiple switchable views.
 
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{find_ancestor_or_self, is_primary_click};
+use crate::theme::WidgetColors;
 
 /// Root container for a tabs component.
 #[derive(Component, Clone, Debug, Default, Reflect)]
@@ -37,8 +41,6 @@ const TAB_ACTIVE_BG: Color = Color::srgb(0.20, 0.45, 0.90);
 const TAB_INACTIVE_BG: Color = Color::NONE;
 const TAB_ACTIVE_TEXT: Color = Color::WHITE;
 const TAB_INACTIVE_TEXT: Color = Color::srgb(0.65, 0.70, 0.80);
-
-use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 
 /// Declarative TabTrigger widget struct.
 #[derive(Clone, Debug, Reflect)]
@@ -99,6 +101,7 @@ impl Scene for TabTrigger {
         let is_active = self.is_active;
         let font = self.font;
 
+        let colors = WidgetColors::default();
         let bg_normal = if is_active { TAB_ACTIVE_BG } else { TAB_INACTIVE_BG };
         let bg_hover = if is_active { Color::srgb(0.28, 0.55, 1.00) } else { Color::srgb(0.16, 0.20, 0.28) };
         let bg_pressed = if is_active { Color::srgb(0.15, 0.38, 0.80) } else { Color::srgb(0.12, 0.15, 0.22) };
@@ -123,7 +126,7 @@ impl Scene for TabTrigger {
                 pressed: bg_pressed,
             }
             UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            UFocusVisual::border(colors.focus_ring(), 2.0)
             ULayout {
                 display: UDisplay::Flex,
                 justify_content: UJustifyContent::Center,
@@ -213,16 +216,29 @@ pub fn luma_tab_list(triggers: impl Scene) -> impl Scene {
 fn switch_tab(
     target_entity: Entity,
     commands: &mut Commands,
-    mut triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
-    mut contents: Query<(&LumaTabContent, &mut ULayout)>,
-    mut text_query: Query<&mut UText>,
+    parents_query: &Query<&ChildOf>,
+    tabs_query: &mut Query<&mut LumaTabs>,
+    triggers: &mut Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
+    contents: &mut Query<(&LumaTabContent, &mut ULayout)>,
+    text_query: &mut Query<&mut UText>,
 ) {
     let Ok((_, target_trigger, _, _, _)) = triggers.get(target_entity) else {
         return;
     };
+    if target_trigger.active {
+        return;
+    }
 
     let group = target_trigger.group.clone();
     let target_value = target_trigger.value.clone();
+
+    if let Some(tabs_entity) = find_ancestor_or_self(target_entity, tabs_query, parents_query) {
+        if let Ok(mut tabs) = tabs_query.get_mut(tabs_entity) {
+            if tabs.group == group {
+                tabs.active = target_value.clone();
+            }
+        }
+    }
 
     // 1. Update triggers
     for (entity, mut trigger, mut node, children, mut colors_opt) in triggers.iter_mut() {
@@ -273,23 +289,24 @@ fn switch_tab(
 fn on_tab_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
-    triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
-    contents: Query<(&LumaTabContent, &mut ULayout)>,
-    text_query: Query<&mut UText>,
     parents_query: Query<&ChildOf>,
+    mut tabs_query: Query<&mut LumaTabs>,
+    mut triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
+    mut contents: Query<(&LumaTabContent, &mut ULayout)>,
+    mut text_query: Query<&mut UText>,
 ) {
-    let target = if triggers.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| triggers.contains(e))
-    };
-    if let Some(target_entity) = target {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    if let Some(target_entity) = find_ancestor_or_self(trigger.entity, &triggers, &parents_query) {
         switch_tab(
             target_entity,
             &mut commands,
-            triggers,
-            contents,
-            text_query,
+            &parents_query,
+            &mut tabs_query,
+            &mut triggers,
+            &mut contents,
+            &mut text_query,
         );
     }
 }
@@ -297,24 +314,105 @@ fn on_tab_click(
 fn on_tab_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
-    triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
-    contents: Query<(&LumaTabContent, &mut ULayout)>,
-    text_query: Query<&mut UText>,
     parents_query: Query<&ChildOf>,
+    mut tabs_query: Query<&mut LumaTabs>,
+    mut triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
+    mut contents: Query<(&LumaTabContent, &mut ULayout)>,
+    mut text_query: Query<&mut UText>,
 ) {
-    let target = if triggers.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| triggers.contains(e))
-    };
-    if let Some(target_entity) = target {
+    if let Some(target_entity) = find_ancestor_or_self(trigger.entity, &triggers, &parents_query) {
         switch_tab(
             target_entity,
             &mut commands,
-            triggers,
-            contents,
-            text_query,
+            &parents_query,
+            &mut tabs_query,
+            &mut triggers,
+            &mut contents,
+            &mut text_query,
         );
+    }
+}
+
+fn keyboard_tabs_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
+    mut focus_state: Option<ResMut<UFocusState>>,
+    focused_query: Query<Entity, With<UFocused>>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut tabs_query: Query<&mut LumaTabs>,
+    mut triggers: Query<(Entity, &mut LumaTabTrigger, &mut UNode, &Children, Option<&mut UInteractionColors>)>,
+    mut contents: Query<(&LumaTabContent, &mut ULayout)>,
+    mut text_query: Query<&mut UText>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+    let left = keyboard.just_pressed(KeyCode::ArrowLeft);
+    let right = keyboard.just_pressed(KeyCode::ArrowRight);
+    if !left && !right {
+        return;
+    }
+
+    let Some(focused_entity) = focused_query.iter().find(|&e| triggers.contains(e)) else {
+        return;
+    };
+    let Ok((_, focused_tab, _, _, _)) = triggers.get(focused_entity) else {
+        return;
+    };
+    let target_group = focused_tab.group.clone();
+
+    let mut sibling_tabs: Vec<Entity> = parents_query
+        .get(focused_entity)
+        .ok()
+        .and_then(|parent| children_query.get(parent.parent()).ok())
+        .map(|siblings| {
+            siblings
+                .iter()
+                .filter(|&e| {
+                    triggers
+                        .get(e)
+                        .map(|(_, t, _, _, _)| t.group == target_group)
+                        .unwrap_or(false)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if sibling_tabs.is_empty() {
+        sibling_tabs = triggers
+            .iter()
+            .filter(|(_, t, _, _, _)| t.group == target_group)
+            .map(|(e, _, _, _, _)| e)
+            .collect();
+    }
+    if sibling_tabs.is_empty() {
+        return;
+    }
+
+    if let Some(pos) = sibling_tabs.iter().position(|&e| e == focused_entity) {
+        let next_idx = if left {
+            if pos == 0 {
+                sibling_tabs.len() - 1
+            } else {
+                pos - 1
+            }
+        } else {
+            (pos + 1) % sibling_tabs.len()
+        };
+        let target_entity = sibling_tabs[next_idx];
+        switch_tab(
+            target_entity,
+            &mut commands,
+            &parents_query,
+            &mut tabs_query,
+            &mut triggers,
+            &mut contents,
+            &mut text_query,
+        );
+        if let Some(ref mut state) = focus_state {
+            set_focus(&mut commands, state, Some(target_entity), FocusModality::Keyboard);
+        }
     }
 }
 
@@ -326,6 +424,7 @@ impl Plugin for LumaTabsPlugin {
             .register_type::<LumaTabTrigger>()
             .register_type::<LumaTabContent>()
             .add_observer(on_tab_click)
-            .add_observer(on_tab_activate);
+            .add_observer(on_tab_activate)
+            .add_systems(Update, keyboard_tabs_system);
     }
 }

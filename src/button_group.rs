@@ -12,13 +12,14 @@
 //! .icon_font(icon_font)
 //! ```
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy::text::LineBreak;
 use bevy_luma::prelude::*;
 
+use crate::helpers::{find_ancestor_or_self, interaction_colors, is_primary_click};
 use crate::navigation::SceneList;
+use crate::theme::WidgetColors;
 
 // ============================================================================
 // Palette
@@ -55,29 +56,30 @@ pub struct ButtonGroupPalette {
 
 impl Default for ButtonGroupPalette {
     fn default() -> Self {
+        let c = WidgetColors::default();
         Self {
-            surface: Color::srgb_u8(0x18, 0x18, 0x1B),
-            surface_hover: Color::srgb_u8(0x24, 0x24, 0x28),
-            surface_pressed: Color::srgb_u8(0x2C, 0x2C, 0x31),
-            border: Color::srgb_u8(0x2B, 0x2B, 0x30),
-            divider: Color::srgb_u8(0x2B, 0x2B, 0x30),
-            text: Color::srgb_u8(0xEC, 0xEC, 0xEE),
+            surface: c.surface,
+            surface_hover: c.surface_hover,
+            surface_pressed: c.secondary_pressed,
+            border: c.surface_border,
+            divider: c.surface_border,
+            text: c.text_primary,
             icon: Color::srgb_u8(0xD8, 0xD8, 0xDC),
-            muted_text: Color::srgb_u8(0x74, 0x74, 0x7C),
+            muted_text: c.text_dim,
             muted_surface: Color::srgb_u8(0x12, 0x12, 0x14),
             input_surface: Color::srgb_u8(0x12, 0x12, 0x14),
-            accent: Color::srgb_u8(0x1F, 0xD6, 0x9A),
-            accent_hover: Color::srgb_u8(0x3D, 0xE2, 0xAC),
-            accent_pressed: Color::srgb_u8(0x17, 0xB8, 0x84),
-            accent_text: Color::srgb_u8(0x06, 0x22, 0x18),
+            accent: c.primary,
+            accent_hover: c.primary_hover,
+            accent_pressed: c.primary_pressed,
+            accent_text: c.on_primary(),
             accent_divider: Color::srgb_u8(0x17, 0xAE, 0x7E),
-            danger: Color::srgb_u8(0x3B, 0x12, 0x13),
-            danger_hover: Color::srgb_u8(0x4A, 0x17, 0x18),
-            danger_pressed: Color::srgb_u8(0x30, 0x0E, 0x0F),
+            danger: c.danger,
+            danger_hover: c.danger_hover,
+            danger_pressed: c.danger_pressed,
             danger_text: Color::srgb_u8(0xF4, 0x6B, 0x6B),
             danger_border: Color::srgb_u8(0x52, 0x1C, 0x1D),
             danger_divider: Color::srgb_u8(0x5A, 0x20, 0x21),
-            caret: Color::srgb_u8(0xEC, 0xEC, 0xEE),
+            caret: c.text_primary,
             selection: Color::srgba(0.12, 0.84, 0.60, 0.30),
         }
     }
@@ -1015,8 +1017,7 @@ fn resolve_button_cell(
     let icon_size = metrics.icon_size;
     let gap = metrics.gap;
     let bg = colors.bg;
-    let hover = colors.hover;
-    let pressed = colors.pressed;
+    let i_colors = interaction_colors(colors.bg, colors.hover, colors.pressed, !interactive);
     let font_badge = font.clone();
     let icon_font_2 = icon_font.clone();
 
@@ -1044,12 +1045,12 @@ fn resolve_button_cell(
             width: border_width,
             radius,
         }
-        UInteraction::default()
-        UInteractionColors {
-            normal: bg,
-            hovered: hover,
-            pressed,
+        UFocusable {
+            enabled: { interactive },
+            ..UFocusable::default()
         }
+        UInteraction::default()
+        i_colors
         ULayout {
             display: UDisplay::Flex,
             flex_direction: UFlexDirection::Row,
@@ -1581,7 +1582,7 @@ impl Scene for GroupOverlayScene {
                     gap: item_gap,
                 }
                 Children [
-                    @{options_scene}
+                    {options_scene}
                 ]
             ]
         };
@@ -1590,12 +1591,52 @@ impl Scene for GroupOverlayScene {
     }
 }
 
+fn try_despawn_entity(commands: &mut Commands, entity: Entity) {
+    if let Ok(mut ec) = commands.get_entity(entity) {
+        ec.try_despawn();
+    }
+}
+
+fn close_segment_menu_overlay(
+    commands: &mut Commands,
+    seg: &mut LumaGroupSegment,
+    children: &Children,
+    chevrons: &mut Query<(&LumaGroupSegmentChevron, &mut UText)>,
+) -> Option<Entity> {
+    seg.is_menu_open = false;
+    let overlay = seg.overlay_entity.take();
+    if let Some(overlay_entity) = overlay {
+        try_despawn_entity(commands, overlay_entity);
+    }
+    for child in children.iter() {
+        if let Ok((chev, mut text)) = chevrons.get_mut(child) {
+            if chev.is_chevron {
+                text.text = Icon::CHEVRON_DOWN.to_string();
+            }
+        }
+    }
+    overlay
+}
+
+fn despawn_segment_overlays(
+    commands: &mut Commands,
+    overlays: &Query<(Entity, &LumaGroupOverlay)>,
+    target: Entity,
+    already_despawned: Option<Entity>,
+) {
+    for (ov_entity, ov) in overlays.iter() {
+        if ov.segment_entity == target && Some(ov_entity) != already_despawned {
+            try_despawn_entity(commands, ov_entity);
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn toggle_group_menu(
     target: Entity,
     commands: &mut Commands,
-    theme: &ButtonGroupTheme,
-    app_theme: &Theme,
+    theme: Option<&ButtonGroupTheme>,
+    app_theme: Option<&Theme>,
     windows: &Query<&Window>,
     cameras: &Query<(&Camera, &GlobalTransform)>,
     trigger_transform_query: &Query<(&GlobalTransform, &ComputedSize)>,
@@ -1606,42 +1647,25 @@ fn toggle_group_menu(
     let Ok((_, mut seg, children, _)) = segments.get_mut(target) else {
         return;
     };
+    if !seg.interactive {
+        return;
+    }
 
     if seg.is_menu_open {
-        seg.is_menu_open = false;
-        if let Some(overlay) = seg.overlay_entity.take() {
-            commands.entity(overlay).despawn();
-        }
-        for child in children.iter() {
-            if let Ok((chev, mut text)) = chevrons.get_mut(child) {
-                if chev.is_chevron {
-                    text.text = Icon::CHEVRON_DOWN.to_string();
-                }
-            }
-        }
+        close_segment_menu_overlay(commands, &mut seg, children, chevrons);
         return;
     }
 
     // Close any other open group overlays first
     for (other_entity, mut other_seg, other_children, _) in segments.iter_mut() {
         if other_entity != target && other_seg.is_menu_open {
-            other_seg.is_menu_open = false;
-            if let Some(overlay) = other_seg.overlay_entity.take() {
-                commands.entity(overlay).despawn();
-            }
-            for child in other_children.iter() {
-                if let Ok((chev, mut text)) = chevrons.get_mut(child) {
-                    if chev.is_chevron {
-                        text.text = Icon::CHEVRON_DOWN.to_string();
-                    }
-                }
-            }
+            close_segment_menu_overlay(commands, &mut other_seg, other_children, chevrons);
         }
     }
 
     // Despawn any dangling overlays
     for (ov_entity, _) in overlays.iter() {
-        commands.entity(ov_entity).despawn();
+        try_despawn_entity(commands, ov_entity);
     }
 
     let Ok((_, mut seg, children, _)) = segments.get_mut(target) else {
@@ -1724,6 +1748,11 @@ fn toggle_group_menu(
     };
     menu_left = menu_left.clamp(4.0, (win_w - menu_width - 4.0).max(4.0));
 
+    let palette = theme.map(|t| t.palette).unwrap_or_default();
+    let (font, icon_font) = app_theme
+        .map(|t| (t.text.font.inter_regular.clone(), t.icon.font.clone()))
+        .unwrap_or_default();
+
     let overlay_scene = GroupOverlayScene {
         segment_entity: target,
         menu_left,
@@ -1734,9 +1763,9 @@ fn toggle_group_menu(
         item_gap,
         options,
         current_value: seg.value.clone(),
-        font: app_theme.text.font.inter_regular.clone(),
-        icon_font: app_theme.icon.font.clone(),
-        palette: theme.palette,
+        font,
+        icon_font,
+        palette,
     };
 
     let overlay_id = commands.spawn_scene(overlay_scene).id();
@@ -1752,11 +1781,44 @@ fn toggle_group_menu(
     }
 }
 
+fn apply_segment_visual_state(
+    entity: Entity,
+    seg: &LumaGroupSegment,
+    palette: &ButtonGroupPalette,
+    on: ToneColors,
+    visuals: &mut Query<(
+        &mut UNode,
+        Option<&mut UInteractionColors>,
+        Option<&mut UBorder>,
+        &Children,
+    )>,
+    glyphs: &mut Query<&mut UText, With<LumaGroupSegmentGlyph>>,
+) {
+    let off = tone_colors(palette, seg.base_tone, &SegmentKind::Button);
+    let c = if seg.selected { on } else { off };
+    if let Ok((mut node, colors, border, children)) = visuals.get_mut(entity) {
+        node.background_color = c.bg;
+        if let Some(mut colors) = colors {
+            colors.normal = c.bg;
+            colors.hovered = c.hover;
+            colors.pressed = c.pressed;
+        }
+        if let Some(mut border) = border {
+            border.color = if seg.selected { palette.accent } else { palette.border };
+        }
+        for child in children.iter() {
+            if let Ok(mut text) = glyphs.get_mut(child) {
+                text.color = c.text;
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn activate_segment(
     target: Entity,
     commands: &mut Commands,
-    theme: &ButtonGroupTheme,
+    theme: Option<&ButtonGroupTheme>,
     groups: &Query<&LumaButtonGroup>,
     segments: &mut Query<(Entity, &mut LumaGroupSegment, &Children, &ChildOf)>,
     visuals: &mut Query<(
@@ -1782,10 +1844,10 @@ fn activate_segment(
         .get(group_entity)
         .map(|g| g.selection)
         .unwrap_or(GroupSelection::None);
+    let p = theme.map(|t| t.palette).unwrap_or_default();
 
     match selection_mode {
         GroupSelection::Single => {
-            let p = theme.palette;
             let on = tone_colors(&p, SegmentTone::Accent, &SegmentKind::Button);
 
             for (entity, mut seg, _, parent) in segments.iter_mut() {
@@ -1796,50 +1858,15 @@ fn activate_segment(
                 if entity == target {
                     final_selected = true;
                 }
-                let off = tone_colors(&p, seg.base_tone, &SegmentKind::Button);
-                let c = if seg.selected { on } else { off };
-                if let Ok((mut node, colors, border, children)) = visuals.get_mut(entity) {
-                    node.background_color = c.bg;
-                    if let Some(mut colors) = colors {
-                        colors.normal = c.bg;
-                        colors.hovered = c.hover;
-                        colors.pressed = c.pressed;
-                    }
-                    if let Some(mut border) = border {
-                        border.color = if seg.selected { p.accent } else { p.border };
-                    }
-                    for child in children.iter() {
-                        if let Ok(mut text) = glyphs.get_mut(child) {
-                            text.color = c.text;
-                        }
-                    }
-                }
+                apply_segment_visual_state(entity, &seg, &p, on, visuals, glyphs);
             }
         }
         GroupSelection::Multiple => {
-            let p = theme.palette;
             let on = tone_colors(&p, SegmentTone::Accent, &SegmentKind::Button);
             if let Ok((entity, mut seg, _, _)) = segments.get_mut(target) {
                 seg.selected = !seg.selected;
                 final_selected = seg.selected;
-                let off = tone_colors(&p, seg.base_tone, &SegmentKind::Button);
-                let c = if seg.selected { on } else { off };
-                if let Ok((mut node, colors, border, children)) = visuals.get_mut(entity) {
-                    node.background_color = c.bg;
-                    if let Some(mut colors) = colors {
-                        colors.normal = c.bg;
-                        colors.hovered = c.hover;
-                        colors.pressed = c.pressed;
-                    }
-                    if let Some(mut border) = border {
-                        border.color = if seg.selected { p.accent } else { p.border };
-                    }
-                    for child in children.iter() {
-                        if let Ok(mut text) = glyphs.get_mut(child) {
-                            text.color = c.text;
-                        }
-                    }
-                }
+                apply_segment_visual_state(entity, &seg, &p, on, visuals, glyphs);
             }
         }
         GroupSelection::None => {}
@@ -1855,11 +1882,63 @@ fn activate_segment(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn handle_segment_action(
+    trigger_entity: Entity,
+    commands: &mut Commands,
+    theme: Option<&ButtonGroupTheme>,
+    app_theme: Option<&Theme>,
+    windows: &Query<&Window>,
+    cameras: &Query<(&Camera, &GlobalTransform)>,
+    trigger_transform_query: &Query<(&GlobalTransform, &ComputedSize)>,
+    parents: &Query<&ChildOf>,
+    groups: &Query<&LumaButtonGroup>,
+    segments: &mut Query<(Entity, &mut LumaGroupSegment, &Children, &ChildOf)>,
+    visuals: &mut Query<(
+        &mut UNode,
+        Option<&mut UInteractionColors>,
+        Option<&mut UBorder>,
+        &Children,
+    )>,
+    text_params: &mut ParamSet<(
+        Query<(&LumaGroupSegmentChevron, &mut UText)>,
+        Query<&mut UText, With<LumaGroupSegmentGlyph>>,
+    )>,
+    overlays: &Query<(Entity, &LumaGroupOverlay)>,
+) {
+    let Some(target) = find_segment(trigger_entity, segments, parents) else {
+        return;
+    };
+    let is_menu = segments
+        .get(target)
+        .map(|(_, seg, _, _)| seg.menu_kind != SegmentMenuKind::None || !seg.menu_options.is_empty())
+        .unwrap_or(false);
+
+    if is_menu {
+        let mut chevrons = text_params.p0();
+        toggle_group_menu(
+            target,
+            commands,
+            theme,
+            app_theme,
+            windows,
+            cameras,
+            trigger_transform_query,
+            segments,
+            &mut chevrons,
+            overlays,
+        );
+    } else {
+        let mut glyphs = text_params.p1();
+        activate_segment(target, commands, theme, groups, segments, visuals, &mut glyphs);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn on_group_segment_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
-    theme: Res<ButtonGroupTheme>,
-    app_theme: Res<Theme>,
+    theme: Option<Res<ButtonGroupTheme>>,
+    app_theme: Option<Res<Theme>>,
     windows: Query<&Window>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     trigger_transform_query: Query<(&GlobalTransform, &ComputedSize)>,
@@ -1878,50 +1957,32 @@ fn on_group_segment_click(
     )>,
     overlays: Query<(Entity, &LumaGroupOverlay)>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
-    if let Some(target) = find_segment(trigger.entity, &segments, &parents) {
-        let is_menu = segments
-            .get(target)
-            .map(|(_, seg, _, _)| seg.menu_kind != SegmentMenuKind::None || !seg.menu_options.is_empty())
-            .unwrap_or(false);
-
-        if is_menu {
-            let mut chevrons = text_params.p0();
-            toggle_group_menu(
-                target,
-                &mut commands,
-                &theme,
-                &app_theme,
-                &windows,
-                &cameras,
-                &trigger_transform_query,
-                &mut segments,
-                &mut chevrons,
-                &overlays,
-            );
-        } else {
-            let mut glyphs = text_params.p1();
-            activate_segment(
-                target,
-                &mut commands,
-                &theme,
-                &groups,
-                &mut segments,
-                &mut visuals,
-                &mut glyphs,
-            );
-        }
-    }
+    handle_segment_action(
+        trigger.entity,
+        &mut commands,
+        theme.as_deref(),
+        app_theme.as_deref(),
+        &windows,
+        &cameras,
+        &trigger_transform_query,
+        &parents,
+        &groups,
+        &mut segments,
+        &mut visuals,
+        &mut text_params,
+        &overlays,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
 fn on_group_segment_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
-    theme: Res<ButtonGroupTheme>,
-    app_theme: Res<Theme>,
+    theme: Option<Res<ButtonGroupTheme>>,
+    app_theme: Option<Res<Theme>>,
     windows: Query<&Window>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     trigger_transform_query: Query<(&GlobalTransform, &ComputedSize)>,
@@ -1940,45 +2001,28 @@ fn on_group_segment_activate(
     )>,
     overlays: Query<(Entity, &LumaGroupOverlay)>,
 ) {
-    if let Some(target) = find_segment(trigger.entity, &segments, &parents) {
-        let is_menu = segments
-            .get(target)
-            .map(|(_, seg, _, _)| seg.menu_kind != SegmentMenuKind::None || !seg.menu_options.is_empty())
-            .unwrap_or(false);
-
-        if is_menu {
-            let mut chevrons = text_params.p0();
-            toggle_group_menu(
-                target,
-                &mut commands,
-                &theme,
-                &app_theme,
-                &windows,
-                &cameras,
-                &trigger_transform_query,
-                &mut segments,
-                &mut chevrons,
-                &overlays,
-            );
-        } else {
-            let mut glyphs = text_params.p1();
-            activate_segment(
-                target,
-                &mut commands,
-                &theme,
-                &groups,
-                &mut segments,
-                &mut visuals,
-                &mut glyphs,
-            );
-        }
-    }
+    handle_segment_action(
+        trigger.entity,
+        &mut commands,
+        theme.as_deref(),
+        app_theme.as_deref(),
+        &windows,
+        &cameras,
+        &trigger_transform_query,
+        &parents,
+        &groups,
+        &mut segments,
+        &mut visuals,
+        &mut text_params,
+        &overlays,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
 fn on_group_menu_item_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
+    parents: Query<&ChildOf>,
     menu_items: Query<&LumaGroupMenuItem>,
     mut segments: Query<(Entity, &mut LumaGroupSegment, &Children, &ChildOf)>,
     mut text_params: ParamSet<(
@@ -1987,10 +2031,13 @@ fn on_group_menu_item_click(
     )>,
     overlays: Query<(Entity, &LumaGroupOverlay)>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
-    let Ok(item) = menu_items.get(trigger.entity) else {
+    let Some(item_entity) = find_ancestor_or_self(trigger.entity, &menu_items, &parents) else {
+        return;
+    };
+    let Ok(item) = menu_items.get(item_entity) else {
         return;
     };
     let target = item.segment_entity;
@@ -2002,27 +2049,11 @@ fn on_group_menu_item_click(
 
     let group_entity = child_of.parent();
     let index = seg.index;
-    seg.is_menu_open = false;
-
-    if let Some(overlay) = seg.overlay_entity.take() {
-        commands.entity(overlay).despawn();
-    }
-    for (ov_entity, ov) in overlays.iter() {
-        if ov.segment_entity == target {
-            commands.entity(ov_entity).despawn();
-        }
-    }
-
-    {
+    let taken_overlay = {
         let mut chevrons = text_params.p0();
-        for child in children.iter() {
-            if let Ok((chev, mut text)) = chevrons.get_mut(child) {
-                if chev.is_chevron {
-                    text.text = Icon::CHEVRON_DOWN.to_string();
-                }
-            }
-        }
-    }
+        close_segment_menu_overlay(&mut commands, &mut seg, children, &mut chevrons)
+    };
+    despawn_segment_overlays(&mut commands, &overlays, target, taken_overlay);
 
     if seg.menu_kind == SegmentMenuKind::Select {
         seg.value = option_text.clone();
@@ -2051,7 +2082,7 @@ fn on_group_backdrop_click(
     mut chevrons: Query<(&LumaGroupSegmentChevron, &mut UText)>,
     overlays: Query<(Entity, &LumaGroupOverlay)>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
     let Ok(backdrop) = backdrops.get(trigger.entity) else {
@@ -2059,50 +2090,34 @@ fn on_group_backdrop_click(
     };
     let target = backdrop.segment_entity;
 
-    if let Ok((mut seg, children)) = segments.get_mut(target) {
-        seg.is_menu_open = false;
-        if let Some(overlay) = seg.overlay_entity.take() {
-            commands.entity(overlay).despawn();
-        }
-        for child in children.iter() {
-            if let Ok((chev, mut text)) = chevrons.get_mut(child) {
-                if chev.is_chevron {
-                    text.text = Icon::CHEVRON_DOWN.to_string();
-                }
-            }
-        }
-    }
+    let taken_overlay = if let Ok((mut seg, children)) = segments.get_mut(target) {
+        close_segment_menu_overlay(&mut commands, &mut seg, children, &mut chevrons)
+    } else {
+        None
+    };
 
-    for (ov_entity, ov) in overlays.iter() {
-        if ov.segment_entity == target {
-            commands.entity(ov_entity).despawn();
-        }
-    }
+    despawn_segment_overlays(&mut commands, &overlays, target, taken_overlay);
 }
 
 fn close_group_overlay_on_escape(
     mut commands: Commands,
-    keyboard: Res<ButtonInput<KeyCode>>,
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
     mut segments: Query<(&mut LumaGroupSegment, &Children)>,
     mut chevrons: Query<(&LumaGroupSegmentChevron, &mut UText)>,
     overlays: Query<(Entity, &LumaGroupOverlay)>,
 ) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
     if !keyboard.just_pressed(KeyCode::Escape) {
         return;
     }
 
     for (ov_entity, ov) in overlays.iter() {
-        commands.entity(ov_entity).despawn();
+        try_despawn_entity(&mut commands, ov_entity);
         if let Ok((mut seg, children)) = segments.get_mut(ov.segment_entity) {
-            seg.is_menu_open = false;
             seg.overlay_entity = None;
-            for child in children.iter() {
-                if let Ok((chev, mut text)) = chevrons.get_mut(child) {
-                    if chev.is_chevron {
-                        text.text = Icon::CHEVRON_DOWN.to_string();
-                    }
-                }
-            }
+            close_segment_menu_overlay(&mut commands, &mut seg, children, &mut chevrons);
         }
     }
 }
@@ -2114,7 +2129,7 @@ fn cleanup_orphaned_group_overlays(
 ) {
     for (ov_entity, ov) in overlays.iter() {
         if !segments.contains(ov.segment_entity) {
-            commands.entity(ov_entity).despawn();
+            try_despawn_entity(&mut commands, ov_entity);
         }
     }
 }

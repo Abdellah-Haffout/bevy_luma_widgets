@@ -1,11 +1,11 @@
 //! Sliding drawer and bottom sheet panel container.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
-use crate::theme::DrawerStyle;
+use crate::helpers::{find_ancestor_or_self, is_primary_click};
+use crate::theme::{DrawerStyle, WidgetColors};
 
 /// Position from which the drawer slides out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
@@ -22,6 +22,8 @@ pub enum DrawerPlacement {
 pub struct LumaDrawer {
     pub placement: DrawerPlacement,
     pub is_open: bool,
+    pub style: DrawerStyle,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaDrawer {
@@ -29,6 +31,8 @@ impl Default for LumaDrawer {
         Self {
             placement: DrawerPlacement::Right,
             is_open: true,
+            style: DrawerStyle::default(),
+            has_explicit_style: false,
         }
     }
 }
@@ -145,7 +149,14 @@ impl Scene for Drawer {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let has_explicit_style = self.style.is_some();
         let style = self.style.unwrap_or_default();
+        let palette = WidgetColors::default();
+        let close_hover = palette.ghost_hover();
+        let close_pressed = palette.ghost_pressed();
+        let focus_ring = palette.focus_ring();
+        let close_icon_color = palette.text_dim;
+
         let placement = self.placement;
         let is_open = self.is_open;
         let width = self.width;
@@ -169,11 +180,14 @@ impl Scene for Drawer {
         let border_width = style.border_width;
         let radius = style.radius;
         let padding = style.padding;
+        let drawer_style = style.clone();
 
         let s = bsn! {
             LumaDrawer {
                 placement,
                 is_open,
+                style: drawer_style,
+                has_explicit_style,
             }
             UNode {
                 width: UVal::Percent(1.0),
@@ -242,15 +256,17 @@ impl Scene for Drawer {
                         UInteraction::default()
                         UInteractionColors {
                             normal: Color::NONE,
-                            hovered: Color::srgba(1.0, 1.0, 1.0, 0.08),
-                            pressed: Color::srgba(1.0, 1.0, 1.0, 0.16),
+                            hovered: close_hover,
+                            pressed: close_pressed,
                         }
+                        UFocusable::new()
+                        UFocusVisual::border(focus_ring, 1.0)
                         Children [
                             UText {
                                 text: { Icon::X.to_string() },
                                 font_size: 16.0,
                                 font: icon_font,
-                                color: Color::srgb(0.60, 0.65, 0.75),
+                                color: close_icon_color,
                             }
                         ]
                     ]
@@ -270,40 +286,68 @@ pub fn luma_drawer(placement: DrawerPlacement) -> Drawer {
 fn on_drawer_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
-    drawer_query: Query<Entity, With<LumaDrawer>>,
+    drawer_query: Query<(Entity, &LumaDrawer)>,
     close_query: Query<Entity, With<LumaDrawerClose>>,
     parents_query: Query<&ChildOf>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
 
     let clicked = trigger.entity;
-
-    // Check if clicked the [x] close button
-    let is_close_btn = close_query.contains(clicked)
-        || parents_query
-            .iter_ancestors(clicked)
-            .any(|e| close_query.contains(e));
-
-    // Find the drawer entity
-    let drawer_target = if drawer_query.contains(clicked) {
-        Some(clicked)
-    } else {
-        parents_query
-            .iter_ancestors(clicked)
-            .find(|&e| drawer_query.contains(e))
-    };
-
-    let Some(drawer_entity) = drawer_target else {
+    let is_close_btn = find_ancestor_or_self(clicked, &close_query, &parents_query).is_some();
+    let Some(drawer_entity) = find_ancestor_or_self(clicked, &drawer_query, &parents_query)
+    else {
         return;
     };
+    let Ok((_, drawer)) = drawer_query.get(drawer_entity) else {
+        return;
+    };
+    if !drawer.is_open {
+        return;
+    }
 
-    if is_close_btn {
+    if is_close_btn || drawer_query.contains(clicked) {
         commands.trigger(CloseDrawer(drawer_entity));
-    } else if drawer_query.contains(clicked) {
-        // Direct click on the backdrop (outside the inner panel)
-        commands.trigger(CloseDrawer(drawer_entity));
+    }
+}
+
+fn on_drawer_close_activate(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    drawer_query: Query<(Entity, &LumaDrawer)>,
+    close_query: Query<Entity, With<LumaDrawerClose>>,
+    parents_query: Query<&ChildOf>,
+) {
+    if find_ancestor_or_self(trigger.entity, &close_query, &parents_query).is_none() {
+        return;
+    }
+    let Some(drawer_entity) =
+        find_ancestor_or_self(trigger.entity, &drawer_query, &parents_query)
+    else {
+        return;
+    };
+    if let Ok((_, drawer)) = drawer_query.get(drawer_entity) {
+        if drawer.is_open {
+            commands.trigger(CloseDrawer(drawer_entity));
+        }
+    }
+}
+
+fn close_drawer_on_escape(
+    mut commands: Commands,
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    drawer_query: Query<(Entity, &LumaDrawer)>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+    if keyboard.just_pressed(KeyCode::Escape) {
+        for (entity, drawer) in drawer_query.iter() {
+            if drawer.is_open {
+                commands.trigger(CloseDrawer(entity));
+            }
+        }
     }
 }
 
@@ -327,6 +371,8 @@ impl Plugin for LumaDrawerPlugin {
             .register_type::<LumaDrawerClose>()
             .register_type::<LumaDrawerPanel>()
             .add_observer(on_drawer_click)
-            .add_observer(on_close_drawer_event);
+            .add_observer(on_drawer_close_activate)
+            .add_observer(on_close_drawer_event)
+            .add_systems(Update, close_drawer_on_escape);
     }
 }

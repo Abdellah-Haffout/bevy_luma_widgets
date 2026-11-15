@@ -4,6 +4,8 @@ use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
+use crate::helpers::{find_ancestor_or_self, visit_descendants, DescendantVisit};
+
 /// Marker component identifying a tooltip bubble.
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaTooltip;
@@ -123,6 +125,41 @@ pub fn luma_tooltip(
     Tooltip::new(text).font(font)
 }
 
+fn set_tooltip_visible(
+    target: Entity,
+    visible: bool,
+    trigger_query: &Query<&LumaTooltipTrigger>,
+    parents_query: &Query<&ChildOf>,
+    children_query: &Query<&Children>,
+    tooltip_layout: &mut Query<&mut ULayout, With<LumaTooltip>>,
+) {
+    let Some(trigger_entity) = find_ancestor_or_self(target, trigger_query, parents_query) else {
+        return;
+    };
+    let Ok(trigger_comp) = trigger_query.get(trigger_entity) else {
+        return;
+    };
+
+    let display = if visible { UDisplay::Flex } else { UDisplay::None };
+    if let Some(tooltip_e) = trigger_comp.tooltip_entity {
+        if let Ok(mut layout) = tooltip_layout.get_mut(tooltip_e) {
+            layout.display = display;
+        }
+    } else if let Ok(children) = children_query.get(trigger_entity) {
+        for &child in children {
+            visit_descendants(child, children_query, |e| {
+                if trigger_query.contains(e) {
+                    return DescendantVisit::SkipChildren;
+                }
+                if let Ok(mut layout) = tooltip_layout.get_mut(e) {
+                    layout.display = display;
+                }
+                DescendantVisit::Continue
+            });
+        }
+    }
+}
+
 fn on_tooltip_pointer_enter(
     trigger: On<PointerOver>,
     trigger_query: Query<&LumaTooltipTrigger>,
@@ -130,26 +167,14 @@ fn on_tooltip_pointer_enter(
     children_query: Query<&Children>,
     mut tooltip_layout: Query<&mut ULayout, With<LumaTooltip>>,
 ) {
-    let target = if trigger_query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| trigger_query.contains(e))
-    };
-
-    let Some(trigger_entity) = target else { return; };
-    let Ok(trigger_comp) = trigger_query.get(trigger_entity) else { return; };
-
-    if let Some(tooltip_e) = trigger_comp.tooltip_entity {
-        if let Ok(mut layout) = tooltip_layout.get_mut(tooltip_e) {
-            layout.display = UDisplay::Flex;
-        }
-    } else if let Ok(children) = children_query.get(trigger_entity) {
-        for child in children.iter() {
-            if let Ok(mut layout) = tooltip_layout.get_mut(child) {
-                layout.display = UDisplay::Flex;
-            }
-        }
-    }
+    set_tooltip_visible(
+        trigger.entity,
+        true,
+        &trigger_query,
+        &parents_query,
+        &children_query,
+        &mut tooltip_layout,
+    );
 }
 
 fn on_tooltip_pointer_leave(
@@ -159,25 +184,43 @@ fn on_tooltip_pointer_leave(
     children_query: Query<&Children>,
     mut tooltip_layout: Query<&mut ULayout, With<LumaTooltip>>,
 ) {
-    let target = if trigger_query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query.iter_ancestors(trigger.entity).find(|&e| trigger_query.contains(e))
-    };
+    set_tooltip_visible(
+        trigger.entity,
+        false,
+        &trigger_query,
+        &parents_query,
+        &children_query,
+        &mut tooltip_layout,
+    );
+}
 
-    let Some(trigger_entity) = target else { return; };
-    let Ok(trigger_comp) = trigger_query.get(trigger_entity) else { return; };
-
-    if let Some(tooltip_e) = trigger_comp.tooltip_entity {
-        if let Ok(mut layout) = tooltip_layout.get_mut(tooltip_e) {
-            layout.display = UDisplay::None;
-        }
-    } else if let Ok(children) = children_query.get(trigger_entity) {
-        for child in children.iter() {
-            if let Ok(mut layout) = tooltip_layout.get_mut(child) {
-                layout.display = UDisplay::None;
-            }
-        }
+fn tooltip_focus_system(
+    gained: Query<Entity, (With<LumaTooltipTrigger>, Added<UFocused>)>,
+    mut lost: RemovedComponents<UFocused>,
+    trigger_query: Query<&LumaTooltipTrigger>,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut tooltip_layout: Query<&mut ULayout, With<LumaTooltip>>,
+) {
+    for entity in gained.iter() {
+        set_tooltip_visible(
+            entity,
+            true,
+            &trigger_query,
+            &parents_query,
+            &children_query,
+            &mut tooltip_layout,
+        );
+    }
+    for entity in lost.read() {
+        set_tooltip_visible(
+            entity,
+            false,
+            &trigger_query,
+            &parents_query,
+            &children_query,
+            &mut tooltip_layout,
+        );
     }
 }
 
@@ -189,6 +232,7 @@ impl Plugin for LumaTooltipPlugin {
         app.register_type::<LumaTooltip>()
             .register_type::<LumaTooltipTrigger>()
             .add_observer(on_tooltip_pointer_enter)
-            .add_observer(on_tooltip_pointer_leave);
+            .add_observer(on_tooltip_pointer_leave)
+            .add_systems(Update, tooltip_focus_system);
     }
 }

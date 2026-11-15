@@ -4,9 +4,11 @@ use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
+use crate::button::{Button, ButtonClicked, LumaButtonIcon};
+use crate::helpers::{find_ancestor, find_ancestor_or_self, interaction_colors, is_primary_click, visit_descendants, DescendantVisit};
 use crate::navigation::SceneList;
 use crate::prelude::*;
-use crate::button::Button;
+use crate::progress::LumaProgressBar;
 
 // ============================================================================
 // 3.10 Avatar Group
@@ -221,14 +223,28 @@ impl Scene for DataTable {
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
         let font = self.font;
+        let headers_data = self.headers.clone();
+        let rows_data = self.rows.clone();
 
-        let header_cells: Vec<_> = self.headers.into_iter().map(|h| {
+        let header_cells: Vec<_> = self.headers.into_iter().enumerate().map(|(c_idx, h)| {
             let f = font.clone();
+            let hdr_marker = LumaDataTableHeader { col: c_idx };
+            let ic = interaction_colors(
+                Color::NONE,
+                Color::srgba(1.0, 1.0, 1.0, 0.06),
+                Color::srgba(1.0, 1.0, 1.0, 0.12),
+                false,
+            );
             bsn! {
+                hdr_marker
                 UNode {
                     width: UVal::Px(120.0),
                     padding: USides::axes(8.0, 6.0),
+                    border_radius: UCornerRadius::all(4.0),
                 }
+                UInteraction::default()
+                ic
+                UFocusable::default()
                 Children [
                     UText {
                         text: h,
@@ -265,14 +281,23 @@ impl Scene for DataTable {
             } else {
                 Color::NONE
             };
-            let cells: Vec<_> = row.into_iter().map(|cell| {
+            let row_marker = LumaDataTableRow { row_index: r_idx };
+            let row_ic = interaction_colors(
+                bg,
+                Color::srgba(0.35, 0.65, 1.0, 0.08),
+                Color::srgba(0.35, 0.65, 1.0, 0.16),
+                false,
+            );
+            let cells: Vec<_> = row.into_iter().enumerate().map(|(c_idx, cell)| {
                 let f = font.clone();
+                let cell_marker = LumaDataTableCell { row: r_idx, col: c_idx };
                 bsn! {
                     UNode {
                         width: UVal::Px(120.0),
                         padding: USides::axes(8.0, 8.0),
                     }
                     Children [
+                        cell_marker
                         UText {
                             text: cell,
                             font_size: 13.0,
@@ -285,6 +310,7 @@ impl Scene for DataTable {
 
             let cells_scene = SceneList::new(cells);
             bsn! {
+                row_marker
                 UNode {
                     padding: USides::axes(12.0, 0.0),
                     background_color: bg,
@@ -293,6 +319,9 @@ impl Scene for DataTable {
                     color: Color::srgba(1.0, 1.0, 1.0, 0.05),
                     width: 1.0,
                 }
+                UInteraction::default()
+                row_ic
+                UFocusable::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
@@ -303,8 +332,16 @@ impl Scene for DataTable {
             }
         }).collect();
 
+        let table_state = LumaDataTable {
+            headers: headers_data,
+            rows: rows_data,
+            sort_col: None,
+            sort_ascending: true,
+            selected_row: None,
+        };
         let row_nodes_scene = SceneList::new(row_nodes);
         let s = bsn! {
+            table_state
             UNode {
                 background_color: Color::srgb(0.09, 0.10, 0.14),
                 border_radius: UCornerRadius::all(8.0),
@@ -568,7 +605,11 @@ impl Scene for CommentThread {
                         font: text_font,
                     }
                     --
-                    @{Button::new("Reply").ghost().size(ButtonSize::Small).font(font)}
+                    LumaCommentReplyBtn
+                    UNode::default()
+                    Children [
+                        @{Button::new("Reply").ghost().size(ButtonSize::Small).font(font)}
+                    ]
                 ]
             ]
         };
@@ -745,7 +786,8 @@ impl Scene for MediaPlayer {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let play_icon = if self.is_playing { Icon::X } else { Icon::CIRCLE_PLAY };
+        let is_playing = self.is_playing;
+        let play_icon = if is_playing { Icon::X } else { Icon::CIRCLE_PLAY };
         let title = self.title;
         let artist = self.artist;
         let progress = self.progress;
@@ -753,8 +795,10 @@ impl Scene for MediaPlayer {
         let icon_font = self.icon_font;
         let title_font = font.clone();
         let artist_font = font;
+        let player_state = LumaMediaPlayer { is_playing, progress };
 
         let s = bsn! {
+            player_state
             UNode {
                 width: UVal::Px(320.0),
                 padding: USides::all(16.0),
@@ -794,7 +838,15 @@ impl Scene for MediaPlayer {
                     }
                 ]
                 --
-                @{ProgressBar::new(progress)}
+                LumaMediaProgressWrap
+                UNode {
+                    width: UVal::Percent(1.0),
+                }
+                UInteraction::default()
+                UFocusable::default()
+                Children [
+                    @{ProgressBar::new(progress)}
+                ]
                 --
                 UNode::default()
                 ULayout {
@@ -805,11 +857,23 @@ impl Scene for MediaPlayer {
                     gap: 16.0,
                 }
                 Children [
-                    @{Button::icon_button(Icon::CHEVRON_LEFT).ghost().size(ButtonSize::Small).icon_font(icon_font.clone())}
+                    LumaMediaBtn { action: MediaAction::Prev }
+                    UNode::default()
+                    Children [
+                        @{Button::icon_button(Icon::CHEVRON_LEFT).ghost().size(ButtonSize::Small).icon_font(icon_font.clone())}
+                    ]
                     --
-                    @{Button::icon_button(play_icon).size(ButtonSize::Medium).icon_font(icon_font.clone())}
+                    LumaMediaBtn { action: MediaAction::PlayPause }
+                    UNode::default()
+                    Children [
+                        @{Button::icon_button(play_icon).size(ButtonSize::Medium).icon_font(icon_font.clone())}
+                    ]
                     --
-                    @{Button::icon_button(Icon::CHEVRON_RIGHT).ghost().size(ButtonSize::Small).icon_font(icon_font)}
+                    LumaMediaBtn { action: MediaAction::Next }
+                    UNode::default()
+                    Children [
+                        @{Button::icon_button(Icon::CHEVRON_RIGHT).ghost().size(ButtonSize::Small).icon_font(icon_font)}
+                    ]
                 ]
             ]
         };
@@ -868,6 +932,7 @@ impl Scene for ImageLightbox {
         let font = self.font;
         let icon_font = self.icon_font;
         let s = bsn! {
+            LumaImageLightbox
             UNode {
                 width: UVal::Px(480.0),
                 padding: USides::all(16.0),
@@ -892,7 +957,11 @@ impl Scene for ImageLightbox {
                     justify_content: UJustifyContent::End,
                 }
                 Children [
-                    @{Button::icon_button(Icon::X).ghost().size(ButtonSize::Small).icon_font(icon_font)}
+                    LumaLightboxCloseBtn
+                    UNode::default()
+                    Children [
+                        @{Button::icon_button(Icon::X).ghost().size(ButtonSize::Small).icon_font(icon_font)}
+                    ]
                 ]
                 --
                 // Image canvas placeholder
@@ -1145,21 +1214,37 @@ impl Scene for NotificationCenter {
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
         let font = self.font;
-        let notif_rows: Vec<_> = self.notifications.into_iter().map(|(tit, time)| {
+        let notif_rows: Vec<_> = self.notifications.into_iter().enumerate().map(|(idx, (tit, time))| {
             let f1 = font.clone();
             let f2 = font.clone();
+            let row_marker = LumaNotificationItem {
+                index: idx,
+                title: tit.clone(),
+                read: false,
+            };
+            let ic = interaction_colors(
+                Color::srgba(1.0, 1.0, 1.0, 0.03),
+                Color::srgba(1.0, 1.0, 1.0, 0.08),
+                Color::srgba(1.0, 1.0, 1.0, 0.14),
+                false,
+            );
             bsn! {
+                row_marker
                 UNode {
                     padding: USides::axes(12.0, 8.0),
                     border_radius: UCornerRadius::all(6.0),
                     background_color: Color::srgba(1.0, 1.0, 1.0, 0.03),
                 }
+                UInteraction::default()
+                ic
+                UFocusable::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Column,
                     gap: 2.0,
                 }
                 Children [
+                    LumaNotificationTitle
                     UText {
                         text: tit,
                         font_size: 13.0,
@@ -1181,6 +1266,7 @@ impl Scene for NotificationCenter {
         let header_font = font.clone();
         let header_title = "Notifications".to_string();
         let s = bsn! {
+            LumaNotificationCenter
             UNode {
                 width: UVal::Px(320.0),
                 padding: USides::all(16.0),
@@ -1272,6 +1358,7 @@ impl Scene for CartDrawer {
         let subtotal_label = "Subtotal".to_string();
 
         let s = bsn! {
+            LumaCartDrawer
             UNode {
                 width: UVal::Px(360.0),
                 height: UVal::Percent(1.0),
@@ -1338,7 +1425,11 @@ impl Scene for CartDrawer {
                         }
                     ]
                     --
-                    @{Button::new("Proceed to Checkout").size(ButtonSize::Large).font(btn_font)}
+                    LumaCartCheckoutBtn
+                    UNode::default()
+                    Children [
+                        @{Button::new("Proceed to Checkout").size(ButtonSize::Large).font(btn_font)}
+                    ]
                 ]
             ]
         };
@@ -1562,10 +1653,22 @@ impl Scene for CalendarSchedule {
         let font = self.font;
         let day_font = font.clone();
 
-        let slots: Vec<_> = self.events.into_iter().map(|(time, evt)| {
+        let slots: Vec<_> = self.events.into_iter().enumerate().map(|(idx, (time, evt))| {
             let f1 = font.clone();
             let f2 = font.clone();
+            let slot_marker = LumaScheduleSlot {
+                index: idx,
+                time: time.clone(),
+                title: evt.clone(),
+            };
+            let ic = interaction_colors(
+                Color::srgba(0.35, 0.65, 1.0, 0.08),
+                Color::srgba(0.35, 0.65, 1.0, 0.16),
+                Color::srgba(0.35, 0.65, 1.0, 0.24),
+                false,
+            );
             bsn! {
+                slot_marker
                 UNode {
                     padding: USides::all(10.0),
                     background_color: Color::srgba(0.35, 0.65, 1.0, 0.08),
@@ -1576,6 +1679,9 @@ impl Scene for CalendarSchedule {
                     width: 1.0,
                     radius: UCornerRadius::all(6.0),
                 }
+                UInteraction::default()
+                ic
+                UFocusable::default()
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
@@ -1602,6 +1708,7 @@ impl Scene for CalendarSchedule {
 
         let slots_scene = SceneList::new(slots);
         let s = bsn! {
+            LumaCalendarSchedule { selected_index: None }
             UNode {
                 width: UVal::Px(340.0),
                 padding: USides::all(16.0),
@@ -1638,5 +1745,811 @@ impl Scene for CalendarSchedule {
             ]
         };
         s.resolve(context, scene)
+    }
+}
+
+// ============================================================================
+// Runtime DataView Components, Events, Observers & Systems
+// ============================================================================
+
+/// Runtime state for [`DataTable`].
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaDataTable {
+    pub headers: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+    pub sort_col: Option<usize>,
+    pub sort_ascending: bool,
+    pub selected_row: Option<usize>,
+}
+
+/// Interactive sortable header cell inside [`DataTable`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaDataTableHeader {
+    pub col: usize,
+}
+
+/// Interactive row inside [`DataTable`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaDataTableRow {
+    pub row_index: usize,
+}
+
+/// Marker on cell `UText` inside [`DataTable`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaDataTableCell {
+    pub row: usize,
+    pub col: usize,
+}
+
+/// Marker wrapping [`CommentThread`]'s Reply button.
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaCommentReplyBtn;
+
+/// Runtime state for [`MediaPlayer`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaMediaPlayer {
+    pub is_playing: bool,
+    pub progress: f32,
+}
+
+/// Interactive scrubber wrapper around [`ProgressBar`] in [`MediaPlayer`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaMediaProgressWrap;
+
+/// Action button variants inside [`MediaPlayer`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
+pub enum MediaAction {
+    Prev,
+    #[default]
+    PlayPause,
+    Next,
+}
+
+/// Marker wrapping buttons inside [`MediaPlayer`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaMediaBtn {
+    pub action: MediaAction,
+}
+
+/// Runtime root marker for [`ImageLightbox`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaImageLightbox;
+
+/// Marker wrapping the close button inside [`ImageLightbox`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaLightboxCloseBtn;
+
+/// Root marker for [`NotificationCenter`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaNotificationCenter;
+
+/// Interactive notification row inside [`NotificationCenter`].
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaNotificationItem {
+    pub index: usize,
+    pub title: String,
+    pub read: bool,
+}
+
+/// Marker on title `UText` of [`NotificationCenter`] rows.
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaNotificationTitle;
+
+/// Root marker for [`CartDrawer`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaCartDrawer;
+
+/// Marker wrapping the checkout button in [`CartDrawer`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaCartCheckoutBtn;
+
+/// Runtime state for [`CalendarSchedule`].
+#[derive(Component, Clone, Copy, Debug, Default, Reflect)]
+pub struct LumaCalendarSchedule {
+    pub selected_index: Option<usize>,
+}
+
+/// Interactive slot row inside [`CalendarSchedule`].
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaScheduleSlot {
+    pub index: usize,
+    pub time: String,
+    pub title: String,
+}
+
+// Semantic DataView Events
+
+/// Event emitted when a [`DataTable`] header sorts its rows.
+#[derive(Event, Clone, Copy, Debug, Reflect)]
+pub struct DataTableSorted {
+    pub entity: Entity,
+    pub column: usize,
+    pub ascending: bool,
+}
+
+/// Event emitted when a [`DataTable`] row is selected.
+#[derive(Event, Clone, Debug, Reflect)]
+pub struct DataTableRowSelected {
+    pub entity: Entity,
+    pub row_index: usize,
+    pub values: Vec<String>,
+}
+
+/// Event emitted when a [`CommentThread`] Reply button is activated.
+#[derive(Event, Clone, Copy, Debug, Reflect)]
+pub struct CommentReplyClicked {
+    pub entity: Entity,
+}
+
+/// Event emitted when [`MediaPlayer`] playback state toggles.
+#[derive(Event, Clone, Copy, Debug, Reflect)]
+pub struct MediaPlaybackToggled {
+    pub entity: Entity,
+    pub is_playing: bool,
+}
+
+/// Event emitted when [`MediaPlayer`] Prev/Next track button is clicked.
+#[derive(Event, Clone, Copy, Debug, Reflect)]
+pub struct MediaTrackStepped {
+    pub entity: Entity,
+    pub delta: i32,
+}
+
+/// Event emitted when [`MediaPlayer`] scrubber progress changes.
+#[derive(Event, Clone, Copy, Debug, Reflect)]
+pub struct MediaProgressChanged {
+    pub entity: Entity,
+    pub progress: f32,
+}
+
+/// Event emitted when [`ImageLightbox`] close button is clicked.
+#[derive(Event, Clone, Copy, Debug, Reflect)]
+pub struct LightboxClosed {
+    pub entity: Entity,
+}
+
+/// Event emitted when a notification row in [`NotificationCenter`] is clicked/read.
+#[derive(Event, Clone, Debug, Reflect)]
+pub struct NotificationRead {
+    pub entity: Entity,
+    pub index: usize,
+    pub title: String,
+}
+
+/// Event emitted when [`CartDrawer`] checkout button is clicked.
+#[derive(Event, Clone, Copy, Debug, Reflect)]
+pub struct CartCheckoutClicked {
+    pub entity: Entity,
+}
+
+/// Event emitted when a slot in [`CalendarSchedule`] is clicked/selected.
+#[derive(Event, Clone, Debug, Reflect)]
+pub struct ScheduleSlotSelected {
+    pub entity: Entity,
+    pub index: usize,
+    pub time: String,
+    pub title: String,
+}
+
+// --- DataTable Observers ---
+
+fn activate_datatable_header(
+    hdr_ent: Entity,
+    commands: &mut Commands,
+    parents_query: &Query<&ChildOf>,
+    children_query: &Query<&Children>,
+    table_q: &mut Query<&mut LumaDataTable>,
+    header_q: &Query<&LumaDataTableHeader>,
+    mut cell_q: &mut Query<(&LumaDataTableCell, &mut UText)>,
+    mut hdr_text_q: &mut Query<&mut UText, Without<LumaDataTableCell>>,
+) {
+    let Ok(hdr) = header_q.get(hdr_ent) else {
+        return;
+    };
+    let col = hdr.col;
+    let Some(table_ent) = find_ancestor(hdr_ent, table_q, parents_query) else {
+        return;
+    };
+    let Ok(mut table) = table_q.get_mut(table_ent) else {
+        return;
+    };
+
+    if table.sort_col == Some(col) {
+        table.sort_ascending = !table.sort_ascending;
+    } else {
+        table.sort_col = Some(col);
+        table.sort_ascending = true;
+    }
+    let ascending = table.sort_ascending;
+    table.rows.sort_by(|a, b| {
+        let ka = a.get(col).map(|s| s.to_lowercase()).unwrap_or_default();
+        let kb = b.get(col).map(|s| s.to_lowercase()).unwrap_or_default();
+        if ascending {
+            ka.cmp(&kb)
+        } else {
+            kb.cmp(&ka)
+        }
+    });
+
+    let _ = (&mut cell_q, &mut hdr_text_q);
+    visit_descendants(table_ent, children_query, |e| {
+        if let Ok((cell, mut txt)) = cell_q.get_mut(e) {
+            if let Some(val) = table.rows.get(cell.row).and_then(|r| r.get(cell.col)) {
+                txt.text = val.clone();
+            }
+        } else if let Ok(h) = header_q.get(e) {
+            let color = if h.col == col {
+                Color::srgb(0.35, 0.65, 1.0)
+            } else {
+                Color::srgb(0.55, 0.60, 0.70)
+            };
+            visit_descendants(e, children_query, |c| {
+                if let Ok(mut t) = hdr_text_q.get_mut(c) {
+                    t.color = color;
+                }
+                DescendantVisit::Continue
+            });
+            return DescendantVisit::SkipChildren;
+        }
+        DescendantVisit::Continue
+    });
+
+    commands.trigger(DataTableSorted {
+        entity: table_ent,
+        column: col,
+        ascending,
+    });
+}
+
+fn activate_datatable_row(
+    row_ent: Entity,
+    commands: &mut Commands,
+    parents_query: &Query<&ChildOf>,
+    children_query: &Query<&Children>,
+    table_q: &mut Query<&mut LumaDataTable>,
+    row_q: &mut Query<(&LumaDataTableRow, &mut UNode, &mut UInteractionColors)>,
+) {
+    let Ok((clicked_row, _, _)) = row_q.get(row_ent) else {
+        return;
+    };
+    let row_index = clicked_row.row_index;
+    let Some(table_ent) = find_ancestor(row_ent, table_q, parents_query) else {
+        return;
+    };
+    let Ok(mut table) = table_q.get_mut(table_ent) else {
+        return;
+    };
+    table.selected_row = Some(row_index);
+    let values = table.rows.get(row_index).cloned().unwrap_or_default();
+
+    visit_descendants(table_ent, children_query, |e| {
+        if let Ok((r, mut node, mut ic)) = row_q.get_mut(e) {
+            let selected = r.row_index == row_index;
+            let bg = if selected {
+                Color::srgba(0.35, 0.65, 1.0, 0.14)
+            } else if r.row_index % 2 == 1 {
+                Color::srgba(1.0, 1.0, 1.0, 0.02)
+            } else {
+                Color::NONE
+            };
+            node.background_color = bg;
+            *ic = interaction_colors(
+                bg,
+                Color::srgba(0.35, 0.65, 1.0, 0.08),
+                Color::srgba(0.35, 0.65, 1.0, 0.16),
+                false,
+            );
+            return DescendantVisit::SkipChildren;
+        }
+        DescendantVisit::Continue
+    });
+
+    commands.trigger(DataTableRowSelected {
+        entity: table_ent,
+        row_index,
+        values,
+    });
+}
+
+fn on_datatable_header_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut table_q: Query<&mut LumaDataTable>,
+    header_q: Query<&LumaDataTableHeader>,
+    mut cell_q: Query<(&LumaDataTableCell, &mut UText)>,
+    mut hdr_text_q: Query<&mut UText, Without<LumaDataTableCell>>,
+) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &header_q, &parents_query) {
+        activate_datatable_header(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &mut table_q,
+            &header_q,
+            &mut cell_q,
+            &mut hdr_text_q,
+        );
+    }
+}
+
+fn on_datatable_header_focus(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut table_q: Query<&mut LumaDataTable>,
+    header_q: Query<&LumaDataTableHeader>,
+    mut cell_q: Query<(&LumaDataTableCell, &mut UText)>,
+    mut hdr_text_q: Query<&mut UText, Without<LumaDataTableCell>>,
+) {
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &header_q, &parents_query) {
+        activate_datatable_header(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &mut table_q,
+            &header_q,
+            &mut cell_q,
+            &mut hdr_text_q,
+        );
+    }
+}
+
+fn on_datatable_row_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut table_q: Query<&mut LumaDataTable>,
+    mut row_q: Query<(&LumaDataTableRow, &mut UNode, &mut UInteractionColors)>,
+) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &row_q, &parents_query) {
+        activate_datatable_row(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &mut table_q,
+            &mut row_q,
+        );
+    }
+}
+
+fn on_datatable_row_focus(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut table_q: Query<&mut LumaDataTable>,
+    mut row_q: Query<(&LumaDataTableRow, &mut UNode, &mut UInteractionColors)>,
+) {
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &row_q, &parents_query) {
+        activate_datatable_row(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &mut table_q,
+            &mut row_q,
+        );
+    }
+}
+
+// --- MediaPlayer Scrubber & Button-Wrapped DataViews ---
+
+fn apply_media_progress(
+    player_ent: Entity,
+    player: &mut LumaMediaPlayer,
+    progress: f32,
+    commands: &mut Commands,
+    children_query: &Query<&Children>,
+    pb_q: &mut Query<&mut LumaProgressBar>,
+) {
+    let p = progress.clamp(0.0, 1.0);
+    player.progress = p;
+    visit_descendants(player_ent, children_query, |e| {
+        if let Ok(mut pb) = pb_q.get_mut(e) {
+            pb.value = p;
+            return DescendantVisit::Stop;
+        }
+        DescendantVisit::Continue
+    });
+    commands.trigger(MediaProgressChanged {
+        entity: player_ent,
+        progress: p,
+    });
+}
+
+fn on_media_progress_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    wrap_q: Query<(&GlobalTransform, &ComputedSize), With<LumaMediaProgressWrap>>,
+    mut player_q: Query<&mut LumaMediaPlayer>,
+    mut pb_q: Query<&mut LumaProgressBar>,
+) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    let Some(wrap_ent) = find_ancestor_or_self(trigger.entity, &wrap_q, &parents_query) else {
+        return;
+    };
+    let Ok((gt, computed)) = wrap_q.get(wrap_ent) else {
+        return;
+    };
+    let Some(player_ent) = find_ancestor(wrap_ent, &player_q, &parents_query) else {
+        return;
+    };
+    let Ok(mut player) = player_q.get_mut(player_ent) else {
+        return;
+    };
+    let ratio = crate::navigation::compute_pointer_bar_ratio(
+        trigger.pointer.position,
+        trigger.hit.position,
+        gt,
+        computed,
+        true,
+        288.0,
+        &cameras,
+    );
+    apply_media_progress(player_ent, &mut player, ratio, &mut commands, &children_query, &mut pb_q);
+}
+
+fn on_media_progress_drag(
+    trigger: On<PointerDrag>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    wrap_q: Query<(&GlobalTransform, &ComputedSize), With<LumaMediaProgressWrap>>,
+    mut player_q: Query<&mut LumaMediaPlayer>,
+    mut pb_q: Query<&mut LumaProgressBar>,
+) {
+    if trigger.event().button != PointerButton::Primary {
+        return;
+    }
+    let Some(wrap_ent) = find_ancestor_or_self(trigger.entity, &wrap_q, &parents_query) else {
+        return;
+    };
+    let Ok((gt, computed)) = wrap_q.get(wrap_ent) else {
+        return;
+    };
+    let Some(player_ent) = find_ancestor(wrap_ent, &player_q, &parents_query) else {
+        return;
+    };
+    let Ok(mut player) = player_q.get_mut(player_ent) else {
+        return;
+    };
+    let ratio = crate::navigation::compute_pointer_bar_ratio(
+        trigger.pointer.position,
+        None,
+        gt,
+        computed,
+        true,
+        288.0,
+        &cameras,
+    );
+    apply_media_progress(player_ent, &mut player, ratio, &mut commands, &children_query, &mut pb_q);
+}
+
+fn on_dataview_button_clicked(
+    trigger: On<ButtonClicked>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    reply_q: Query<(), With<LumaCommentReplyBtn>>,
+    media_btn_q: Query<&LumaMediaBtn>,
+    mut player_q: Query<&mut LumaMediaPlayer>,
+    lightbox_close_q: Query<(), With<LumaLightboxCloseBtn>>,
+    lightbox_q: Query<(), With<LumaImageLightbox>>,
+    checkout_q: Query<(), With<LumaCartCheckoutBtn>>,
+    cart_q: Query<(), With<LumaCartDrawer>>,
+    icon_marker: Query<(), With<LumaButtonIcon>>,
+    mut layout_q: Query<&mut ULayout>,
+    mut text_q: Query<&mut UText>,
+) {
+    let btn = trigger.0;
+
+    if let Some(reply_ent) = find_ancestor(btn, &reply_q, &parents_query) {
+        commands.trigger(CommentReplyClicked { entity: reply_ent });
+        return;
+    }
+
+    if let Some(mbtn_ent) = find_ancestor(btn, &media_btn_q, &parents_query) {
+        let Ok(mbtn) = media_btn_q.get(mbtn_ent) else {
+            return;
+        };
+        let Some(player_ent) = find_ancestor(mbtn_ent, &player_q, &parents_query) else {
+            return;
+        };
+        let Ok(mut player) = player_q.get_mut(player_ent) else {
+            return;
+        };
+        match mbtn.action {
+            MediaAction::Prev => {
+                commands.trigger(MediaTrackStepped {
+                    entity: player_ent,
+                    delta: -1,
+                });
+            }
+            MediaAction::Next => {
+                commands.trigger(MediaTrackStepped {
+                    entity: player_ent,
+                    delta: 1,
+                });
+            }
+            MediaAction::PlayPause => {
+                player.is_playing = !player.is_playing;
+                let is_playing = player.is_playing;
+                let next_icon = if is_playing {
+                    Icon::X
+                } else {
+                    Icon::CIRCLE_PLAY
+                };
+                visit_descendants(btn, &children_query, |e| {
+                    if icon_marker.contains(e) {
+                        if let Ok(mut t) = text_q.get_mut(e) {
+                            t.text = next_icon.to_string();
+                        }
+                        return DescendantVisit::Stop;
+                    }
+                    DescendantVisit::Continue
+                });
+                commands.trigger(MediaPlaybackToggled {
+                    entity: player_ent,
+                    is_playing,
+                });
+            }
+        }
+        return;
+    }
+
+    if let Some(close_ent) = find_ancestor(btn, &lightbox_close_q, &parents_query) {
+        let lb_ent = find_ancestor(close_ent, &lightbox_q, &parents_query).unwrap_or(close_ent);
+        if let Ok(mut layout) = layout_q.get_mut(lb_ent) {
+            layout.display = UDisplay::None;
+        }
+        commands.trigger(LightboxClosed { entity: lb_ent });
+        return;
+    }
+
+    if let Some(co_ent) = find_ancestor(btn, &checkout_q, &parents_query) {
+        let cart_ent = find_ancestor(co_ent, &cart_q, &parents_query).unwrap_or(co_ent);
+        commands.trigger(CartCheckoutClicked { entity: cart_ent });
+    }
+}
+
+// --- NotificationCenter & CalendarSchedule Observers ---
+
+fn activate_notification_item(
+    item_ent: Entity,
+    commands: &mut Commands,
+    parents_query: &Query<&ChildOf>,
+    children_query: &Query<&Children>,
+    center_q: &Query<(), With<LumaNotificationCenter>>,
+    item_q: &mut Query<(&mut LumaNotificationItem, &mut UNode, &mut UInteractionColors)>,
+    title_marker: &Query<(), With<LumaNotificationTitle>>,
+    text_q: &mut Query<&mut UText>,
+) {
+    let Ok((mut item, mut node, mut ic)) = item_q.get_mut(item_ent) else {
+        return;
+    };
+    item.read = true;
+    let idx = item.index;
+    let title = item.title.clone();
+    let read_bg = Color::srgba(1.0, 1.0, 1.0, 0.01);
+    node.background_color = read_bg;
+    *ic = interaction_colors(
+        read_bg,
+        Color::srgba(1.0, 1.0, 1.0, 0.05),
+        Color::srgba(1.0, 1.0, 1.0, 0.09),
+        false,
+    );
+    visit_descendants(item_ent, children_query, |e| {
+        if title_marker.contains(e) {
+            if let Ok(mut t) = text_q.get_mut(e) {
+                t.color = Color::srgb(0.55, 0.60, 0.70);
+            }
+            return DescendantVisit::Stop;
+        }
+        DescendantVisit::Continue
+    });
+    let center_ent = find_ancestor(item_ent, center_q, parents_query).unwrap_or(item_ent);
+    commands.trigger(NotificationRead {
+        entity: center_ent,
+        index: idx,
+        title,
+    });
+}
+
+fn on_notification_item_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    center_q: Query<(), With<LumaNotificationCenter>>,
+    mut item_q: Query<(&mut LumaNotificationItem, &mut UNode, &mut UInteractionColors)>,
+    title_marker: Query<(), With<LumaNotificationTitle>>,
+    mut text_q: Query<&mut UText>,
+) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &item_q, &parents_query) {
+        activate_notification_item(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &center_q,
+            &mut item_q,
+            &title_marker,
+            &mut text_q,
+        );
+    }
+}
+
+fn on_notification_item_focus(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    center_q: Query<(), With<LumaNotificationCenter>>,
+    mut item_q: Query<(&mut LumaNotificationItem, &mut UNode, &mut UInteractionColors)>,
+    title_marker: Query<(), With<LumaNotificationTitle>>,
+    mut text_q: Query<&mut UText>,
+) {
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &item_q, &parents_query) {
+        activate_notification_item(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &center_q,
+            &mut item_q,
+            &title_marker,
+            &mut text_q,
+        );
+    }
+}
+
+fn activate_schedule_slot(
+    slot_ent: Entity,
+    commands: &mut Commands,
+    parents_query: &Query<&ChildOf>,
+    children_query: &Query<&Children>,
+    sched_q: &mut Query<&mut LumaCalendarSchedule>,
+    slot_q: &mut Query<(&LumaScheduleSlot, &mut UBorder)>,
+) {
+    let Ok((slot, _)) = slot_q.get(slot_ent) else {
+        return;
+    };
+    let idx = slot.index;
+    let time = slot.time.clone();
+    let title = slot.title.clone();
+    let Some(sched_ent) = find_ancestor(slot_ent, sched_q, parents_query) else {
+        return;
+    };
+    if let Ok(mut sched) = sched_q.get_mut(sched_ent) {
+        sched.selected_index = Some(idx);
+    }
+    visit_descendants(sched_ent, children_query, |e| {
+        if let Ok((s, mut border)) = slot_q.get_mut(e) {
+            border.color = if s.index == idx {
+                Color::srgb(0.35, 0.65, 1.0)
+            } else {
+                Color::srgba(0.35, 0.65, 1.0, 0.25)
+            };
+            return DescendantVisit::SkipChildren;
+        }
+        DescendantVisit::Continue
+    });
+    commands.trigger(ScheduleSlotSelected {
+        entity: sched_ent,
+        index: idx,
+        time,
+        title,
+    });
+}
+
+fn on_schedule_slot_click(
+    trigger: On<PointerClick>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut sched_q: Query<&mut LumaCalendarSchedule>,
+    mut slot_q: Query<(&LumaScheduleSlot, &mut UBorder)>,
+) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &slot_q, &parents_query) {
+        activate_schedule_slot(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &mut sched_q,
+            &mut slot_q,
+        );
+    }
+}
+
+fn on_schedule_slot_focus(
+    trigger: On<UFocusActivate>,
+    mut commands: Commands,
+    parents_query: Query<&ChildOf>,
+    children_query: Query<&Children>,
+    mut sched_q: Query<&mut LumaCalendarSchedule>,
+    mut slot_q: Query<(&LumaScheduleSlot, &mut UBorder)>,
+) {
+    if let Some(ent) = find_ancestor_or_self(trigger.entity, &slot_q, &parents_query) {
+        activate_schedule_slot(
+            ent,
+            &mut commands,
+            &parents_query,
+            &children_query,
+            &mut sched_q,
+            &mut slot_q,
+        );
+    }
+}
+
+/// Plugin enabling interactive data views (sortable DataTable, MediaPlayer, Lightbox, Notifications, Checkout, Calendar).
+pub struct LumaDataViewsPlugin;
+
+impl Plugin for LumaDataViewsPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<LumaDataTable>()
+            .register_type::<LumaDataTableHeader>()
+            .register_type::<LumaDataTableRow>()
+            .register_type::<LumaDataTableCell>()
+            .register_type::<LumaCommentReplyBtn>()
+            .register_type::<LumaMediaPlayer>()
+            .register_type::<LumaMediaProgressWrap>()
+            .register_type::<MediaAction>()
+            .register_type::<LumaMediaBtn>()
+            .register_type::<LumaImageLightbox>()
+            .register_type::<LumaLightboxCloseBtn>()
+            .register_type::<LumaNotificationCenter>()
+            .register_type::<LumaNotificationItem>()
+            .register_type::<LumaNotificationTitle>()
+            .register_type::<LumaCartDrawer>()
+            .register_type::<LumaCartCheckoutBtn>()
+            .register_type::<LumaCalendarSchedule>()
+            .register_type::<LumaScheduleSlot>()
+            .register_type::<DataTableSorted>()
+            .register_type::<DataTableRowSelected>()
+            .register_type::<CommentReplyClicked>()
+            .register_type::<MediaPlaybackToggled>()
+            .register_type::<MediaTrackStepped>()
+            .register_type::<MediaProgressChanged>()
+            .register_type::<LightboxClosed>()
+            .register_type::<NotificationRead>()
+            .register_type::<CartCheckoutClicked>()
+            .register_type::<ScheduleSlotSelected>()
+            .add_observer(on_datatable_header_click)
+            .add_observer(on_datatable_header_focus)
+            .add_observer(on_datatable_row_click)
+            .add_observer(on_datatable_row_focus)
+            .add_observer(on_media_progress_click)
+            .add_observer(on_media_progress_drag)
+            .add_observer(on_dataview_button_clicked)
+            .add_observer(on_notification_item_click)
+            .add_observer(on_notification_item_focus)
+            .add_observer(on_schedule_slot_click)
+            .add_observer(on_schedule_slot_focus);
     }
 }

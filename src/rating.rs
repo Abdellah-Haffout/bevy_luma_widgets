@@ -1,9 +1,12 @@
 //! Star rating widget with display and interactive modes.
 
-use bevy::ecs::relationship::Relationship;
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{find_ancestor_or_self, is_primary_click, visit_descendants, DescendantVisit};
+use crate::navigation::SceneList;
+use crate::theme::WidgetColors;
 
 /// Marker and state component for a star rating widget.
 #[derive(Component, Clone, Debug, Reflect)]
@@ -66,6 +69,7 @@ fn static_star_scene(index: u8, active: bool, icon_font: Handle<Font>) -> impl S
 
 fn interactive_star_scene(index: u8, active: bool, icon_font: Handle<Font>) -> impl Scene {
     let color = if active { STAR_ACTIVE_COLOR } else { STAR_INACTIVE_COLOR };
+    let focus_ring = WidgetColors::default().focus_ring();
 
     bsn! {
         LumaRatingStar { index }
@@ -81,7 +85,7 @@ fn interactive_star_scene(index: u8, active: bool, icon_font: Handle<Font>) -> i
             pressed: Color::srgba(1.0, 1.0, 1.0, 0.15),
         }
         UFocusable::new()
-        UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
+        UFocusVisual::border(focus_ring, 1.5)
         ULayout {
             display: UDisplay::Flex,
             justify_content: UJustifyContent::Center,
@@ -150,21 +154,24 @@ impl Rating {
     }
 }
 
-use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
-
 impl Scene for Rating {
     fn resolve(
         self,
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let value = self.value.min(5);
+        let max_stars = self.max_stars.max(1);
+        let value = self.value.min(max_stars);
 
         if self.interactive {
+            let stars: Vec<_> = (1..=max_stars)
+                .map(|i| interactive_star_scene(i, value >= i, self.icon_font.clone()))
+                .collect();
+            let stars_scene = SceneList::new(stars);
             let s = bsn! {
                 LumaRating {
                     value,
-                    max_stars: 5,
+                    max_stars,
                     read_only: false,
                 }
                 UNode::default()
@@ -175,23 +182,19 @@ impl Scene for Rating {
                     gap: 4.0,
                 }
                 Children [
-                    @{interactive_star_scene(1, value >= 1, self.icon_font.clone())}
-                    --
-                    @{interactive_star_scene(2, value >= 2, self.icon_font.clone())}
-                    --
-                    @{interactive_star_scene(3, value >= 3, self.icon_font.clone())}
-                    --
-                    @{interactive_star_scene(4, value >= 4, self.icon_font.clone())}
-                    --
-                    @{interactive_star_scene(5, value >= 5, self.icon_font)}
+                    {stars_scene}
                 ]
             };
             s.resolve(context, scene)
         } else {
+            let stars: Vec<_> = (1..=max_stars)
+                .map(|i| static_star_scene(i, value >= i, self.icon_font.clone()))
+                .collect();
+            let stars_scene = SceneList::new(stars);
             let s = bsn! {
                 LumaRating {
                     value,
-                    max_stars: 5,
+                    max_stars,
                     read_only: true,
                 }
                 UNode::default()
@@ -202,15 +205,7 @@ impl Scene for Rating {
                     gap: 2.0,
                 }
                 Children [
-                    @{static_star_scene(1, value >= 1, self.icon_font.clone())}
-                    --
-                    @{static_star_scene(2, value >= 2, self.icon_font.clone())}
-                    --
-                    @{static_star_scene(3, value >= 3, self.icon_font.clone())}
-                    --
-                    @{static_star_scene(4, value >= 4, self.icon_font.clone())}
-                    --
-                    @{static_star_scene(5, value >= 5, self.icon_font)}
+                    {stars_scene}
                 ]
             };
             s.resolve(context, scene)
@@ -237,29 +232,15 @@ fn set_rating(
     text_query: &mut Query<&mut UText>,
     children_query: &Query<&Children>,
 ) {
-    let (selected_star_index, star_entity) = if let Ok(star) = star_query.get(target_entity) {
-        (star.index, target_entity)
-    } else if let Ok(parent) = parents_query.get(target_entity) {
-        if let Ok(star) = star_query.get(parent.get()) {
-            (star.index, parent.get())
-        } else {
-            return;
-        }
-    } else {
+    let Some(star_entity) = find_ancestor_or_self(target_entity, star_query, parents_query) else {
         return;
     };
+    let Ok(star) = star_query.get(star_entity) else {
+        return;
+    };
+    let selected_star_index = star.index;
 
-    let mut current = star_entity;
-    let mut rating_entity_opt = None;
-    while let Ok(parent) = parents_query.get(current) {
-        current = parent.get();
-        if rating_query.contains(current) {
-            rating_entity_opt = Some(current);
-            break;
-        }
-    }
-
-    let Some(rating_entity) = rating_entity_opt else {
+    let Some(rating_entity) = find_ancestor_or_self(star_entity, rating_query, parents_query) else {
         return;
     };
 
@@ -267,7 +248,7 @@ fn set_rating(
         return;
     };
 
-    if rating.read_only {
+    if rating.read_only || rating.value == selected_star_index {
         return;
     }
 
@@ -280,16 +261,12 @@ fn set_rating(
             } else {
                 STAR_INACTIVE_COLOR
             };
-
-            if let Ok(inner_children) = children_query.get(child) {
-                for inner_child in inner_children.iter() {
-                    if let Ok(mut text) = text_query.get_mut(inner_child) {
-                        text.color = color;
-                    }
+            visit_descendants(child, children_query, |e| {
+                if let Ok(mut text) = text_query.get_mut(e) {
+                    text.color = color;
                 }
-            } else if let Ok(mut text) = text_query.get_mut(child) {
-                text.color = color;
-            }
+                DescendantVisit::Continue
+            });
         }
     }
 
@@ -308,7 +285,7 @@ fn on_star_click(
     mut text_query: Query<&mut UText>,
     children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
     set_rating(

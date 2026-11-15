@@ -1,16 +1,18 @@
 //! Floating popover overlay card widget.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
+use crate::helpers::is_primary_click;
 use crate::theme::PopoverStyle;
 
 /// Marker component for an open popover card.
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaPopover {
     pub is_open: bool,
+    pub style: PopoverStyle,
+    pub has_explicit_style: bool,
 }
 
 /// Event triggered to close an open popover.
@@ -69,6 +71,7 @@ impl Scene for Popover {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let has_explicit_style = self.style.is_some();
         let style = self.style.unwrap_or_default();
         let is_open = self.is_open;
         let width = self.width;
@@ -78,10 +81,13 @@ impl Scene for Popover {
         let border_width = style.border_width;
         let radius = style.radius;
         let padding = style.padding;
+        let popover_style = style.clone();
 
         let s = bsn! {
             LumaPopover {
                 is_open,
+                style: popover_style,
+                has_explicit_style,
             }
             UNode {
                 width,
@@ -120,7 +126,7 @@ fn on_popover_outside_click(
     popover_query: Query<(Entity, &LumaPopover)>,
     parents_query: Query<&ChildOf>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
 
@@ -138,6 +144,23 @@ fn on_popover_outside_click(
 
         if !is_inside {
             commands.trigger(ClosePopover(popover_entity));
+        }
+    }
+}
+
+fn close_popover_on_escape(
+    mut commands: Commands,
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    popover_query: Query<(Entity, &LumaPopover)>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+    if keyboard.just_pressed(KeyCode::Escape) {
+        for (entity, popover) in popover_query.iter() {
+            if popover.is_open {
+                commands.trigger(ClosePopover(entity));
+            }
         }
     }
 }
@@ -160,6 +183,7 @@ impl Plugin for LumaPopoverPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaPopover>()
             .add_observer(on_popover_outside_click)
-            .add_observer(on_close_popover_event);
+            .add_observer(on_close_popover_event)
+            .add_systems(Update, close_popover_on_escape);
     }
 }

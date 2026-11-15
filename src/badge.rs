@@ -54,6 +54,8 @@ impl BadgeVariant {
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaBadge {
     pub variant: BadgeVariant,
+    pub has_explicit_style: bool,
+    pub is_default_variant: bool,
 }
 
 /// Declarative Badge widget struct with all configurable properties.
@@ -149,6 +151,8 @@ impl Scene for Badge {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let has_explicit_style = self.style.is_some();
+        let is_default_variant = !has_explicit_style && self.variant == BadgeVariant::Info;
         let (bg, text_color, border_color, radius, padding, font_size) = if let Some(ref s) = self.style {
             (s.bg_color, s.text_color, s.border_color, s.radius, s.padding, s.font_size)
         } else {
@@ -162,13 +166,21 @@ impl Scene for Badge {
         let icon_font = self.icon_font;
         let label = self.label;
         let font = self.font;
+        let luma_badge = LumaBadge {
+            variant,
+            has_explicit_style,
+            is_default_variant,
+        };
 
         let s = bsn! {
-            LumaBadge { variant }
+            luma_badge
             UNode {
                 background_color: bg,
                 border_radius: UCornerRadius::all(radius),
                 padding,
+            }
+            USelf {
+                flex_shrink: { Some(0.0) },
             }
             UBorder {
                 color: border_color,

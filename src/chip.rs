@@ -1,16 +1,24 @@
 //! Chip / Tag widget with optional icon, avatar initials, and dismiss button.
 
-use bevy::ecs::relationship::Relationship;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{dim_color, find_ancestor_or_self, interaction_colors, is_primary_click};
+use crate::theme::{ChipStyle, WidgetColors};
 
 /// Marker and state component for a chip widget.
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaChip {
     pub label: String,
     pub disabled: bool,
+    pub style: ChipStyle,
+    pub has_explicit_style: bool,
 }
+
+/// Marker component for the label text inside a chip.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaChipLabel;
 
 /// Marker component for the dismiss / close button on a removable chip.
 #[derive(Component, Clone, Debug, Default, Reflect)]
@@ -20,9 +28,6 @@ pub struct LumaChipDismiss;
 #[derive(Event, Clone, Copy, Debug)]
 pub struct ChipDismissed(pub Entity);
 
-const CHIP_BG: Color = Color::srgb(0.14, 0.17, 0.23);
-const CHIP_BORDER: Color = Color::srgb(0.24, 0.29, 0.40);
-const CHIP_TEXT: Color = Color::srgb(0.90, 0.93, 0.98);
 const DISMISS_HOVER: Color = Color::srgba(1.0, 1.0, 1.0, 0.15);
 const DISMISS_PRESSED: Color = Color::srgba(1.0, 1.0, 1.0, 0.25);
 
@@ -35,6 +40,7 @@ pub struct Chip {
     pub disabled: bool,
     pub font: Handle<Font>,
     pub icon_font: Handle<Font>,
+    pub style: Option<ChipStyle>,
 }
 
 impl Default for Chip {
@@ -46,6 +52,7 @@ impl Default for Chip {
             disabled: false,
             font: Handle::default(),
             icon_font: Handle::default(),
+            style: None,
         }
     }
 }
@@ -82,6 +89,11 @@ impl Chip {
         self.icon_font = icon_font;
         self
     }
+
+    pub fn style(mut self, style: ChipStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
 }
 
 impl Scene for Chip {
@@ -90,6 +102,9 @@ impl Scene for Chip {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let has_explicit_style = self.style.is_some();
+        let style = self.style.unwrap_or_default();
+        let colors = WidgetColors::default();
         let chip_label = self.label.clone();
         let has_icon = self.icon.is_some();
         let icon_str = self.icon.unwrap_or_default();
@@ -99,21 +114,61 @@ impl Scene for Chip {
         let label = self.label;
         let font = self.font;
 
+        let bg_color = if disabled {
+            colors.disabled_bg()
+        } else {
+            style.bg_color
+        };
+        let border_color = if disabled {
+            colors.disabled_border()
+        } else {
+            style.border_color
+        };
+        let text_color = if disabled {
+            colors.disabled_text()
+        } else {
+            style.text_color
+        };
+        let icon_color = if disabled {
+            colors.disabled_text()
+        } else {
+            colors.primary
+        };
+        let dismiss_icon_color = if disabled {
+            colors.disabled_text()
+        } else {
+            dim_color(style.text_color, 0.72)
+        };
+        let dismiss_colors = interaction_colors(
+            Color::NONE,
+            DISMISS_HOVER,
+            DISMISS_PRESSED,
+            disabled || !removable,
+        );
+        let radius = style.radius;
+        let border_width = style.border_width;
+        let padding = style.padding;
+        let font_size = style.font_size;
+        let focus_color = colors.focus_ring();
+        let luma_chip = LumaChip {
+            label: chip_label,
+            disabled,
+            style,
+            has_explicit_style,
+        };
+
         let s = bsn! {
-            LumaChip {
-                label: chip_label,
-                disabled,
-            }
+            luma_chip
             UNode {
                 height: UVal::Px(26.0),
-                background_color: CHIP_BG,
-                border_radius: UCornerRadius::all(13.0),
-                padding: USides::axes(8.0, 2.0),
+                background_color: bg_color,
+                border_radius: UCornerRadius::all(radius),
+                padding,
             }
             UBorder {
-                color: CHIP_BORDER,
-                width: 1.0,
-                radius: UCornerRadius::all(13.0),
+                color: border_color,
+                width: border_width,
+                radius: UCornerRadius::all(radius),
             }
             ULayout {
                 display: UDisplay::Flex,
@@ -131,15 +186,16 @@ impl Scene for Chip {
                         text: icon_str,
                         font_size: 13.0,
                         font: { icon_font.clone() },
-                        color: Color::srgb(0.45, 0.70, 1.00),
+                        color: icon_color,
                     }
                 ]
                 --
+                LumaChipLabel
                 UText {
                     text: label,
-                    font_size: 12.0,
+                    font_size,
                     font,
-                    color: CHIP_TEXT,
+                    color: text_color,
                 }
                 --
                 UNode::default()
@@ -154,13 +210,12 @@ impl Scene for Chip {
                         border_radius: UCornerRadius::all(8.0),
                     }
                     UInteraction::default()
-                    UInteractionColors {
-                        normal: Color::NONE,
-                        hovered: DISMISS_HOVER,
-                        pressed: DISMISS_PRESSED,
+                    dismiss_colors
+                    UFocusable {
+                        enabled: { removable && !disabled },
+                        ..UFocusable::default()
                     }
-                    UFocusable::new()
-                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
+                    UFocusVisual::border(focus_color, 1.0)
                     ULayout {
                         display: UDisplay::Flex,
                         justify_content: UJustifyContent::Center,
@@ -171,7 +226,7 @@ impl Scene for Chip {
                             text: { Icon::X.to_string() },
                             font_size: 11.0,
                             font: icon_font,
-                            color: Color::srgb(0.65, 0.70, 0.80),
+                            color: dismiss_icon_color,
                         }
                     ]
                 ]
@@ -230,28 +285,22 @@ fn dismiss_chip(
     dismiss_query: &Query<&LumaChipDismiss>,
     chip_query: &Query<&LumaChip>,
 ) {
-    let dismiss_entity = if dismiss_query.contains(target_entity) {
-        target_entity
-    } else if let Ok(parent) = parents_query.get(target_entity) {
-        if dismiss_query.contains(parent.get()) {
-            parent.get()
-        } else {
-            return;
-        }
-    } else {
+    let Some(dismiss_entity) = find_ancestor_or_self(target_entity, dismiss_query, parents_query) else {
         return;
     };
+    let Some(chip_entity) = find_ancestor_or_self(dismiss_entity, chip_query, parents_query) else {
+        return;
+    };
+    let Ok(chip) = chip_query.get(chip_entity) else {
+        return;
+    };
+    if chip.disabled {
+        return;
+    }
 
-    let mut current = dismiss_entity;
-    while let Ok(parent) = parents_query.get(current) {
-        current = parent.get();
-        if chip_query.contains(current) {
-            commands.trigger(ChipDismissed(current));
-            if let Ok(mut cmd) = commands.get_entity(current) {
-                cmd.try_despawn();
-            }
-            break;
-        }
+    commands.trigger(ChipDismissed(chip_entity));
+    if let Ok(mut cmd) = commands.get_entity(chip_entity) {
+        cmd.try_despawn();
     }
 }
 
@@ -262,7 +311,7 @@ fn on_chip_dismiss_click(
     dismiss_query: Query<&LumaChipDismiss>,
     chip_query: Query<&LumaChip>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
     dismiss_chip(
@@ -295,6 +344,7 @@ pub struct LumaChipPlugin;
 impl Plugin for LumaChipPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaChip>()
+            .register_type::<LumaChipLabel>()
             .register_type::<LumaChipDismiss>()
             .add_observer(on_chip_dismiss_click)
             .add_observer(on_chip_dismiss_activate);

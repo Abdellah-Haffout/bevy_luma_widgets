@@ -1,9 +1,11 @@
 //! Numeric stepper / counter input widget with increment and decrement buttons.
 
-use bevy::ecs::relationship::Relationship;
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{find_ancestor_or_self, interaction_colors, is_primary_click};
+use crate::theme::{StepperStyle, WidgetColors};
 
 /// Marker and state component for a number stepper widget.
 #[derive(Component, Clone, Debug, Reflect)]
@@ -13,6 +15,8 @@ pub struct LumaStepper {
     pub max: f64,
     pub step: f64,
     pub disabled: bool,
+    pub style: StepperStyle,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaStepper {
@@ -23,6 +27,8 @@ impl Default for LumaStepper {
             max: 100.0,
             step: 1.0,
             disabled: false,
+            style: StepperStyle::default(),
+            has_explicit_style: false,
         }
     }
 }
@@ -37,6 +43,10 @@ pub struct LumaStepperButton {
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaStepperValueText;
 
+/// Marker component for icon glyphs inside stepper buttons.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaStepperIcon;
+
 /// Event triggered when a stepper's value changes.
 #[derive(Event, Clone, Copy, Debug)]
 pub struct StepperChanged {
@@ -44,17 +54,13 @@ pub struct StepperChanged {
     pub value: f64,
 }
 
-const STEPPER_BG: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
-const STEPPER_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
-const BTN_BG_NORMAL: Color = Color::srgb_u8(0x18, 0x18, 0x1B);
-const BTN_BG_HOVER: Color = Color::srgb_u8(0x24, 0x24, 0x28);
-const BTN_BG_PRESSED: Color = Color::srgb_u8(0x2C, 0x2C, 0x31);
-
 fn format_value(value: f64, step: f64) -> String {
-    if step.fract() == 0.0 && value.fract() == 0.0 {
-        format!("{:.0}", value)
-    } else {
+    if step.fract().abs() < 1e-9 && value.fract().abs() < 1e-9 {
+        format!("{:.0}", value.round())
+    } else if (step * 10.0).fract().abs() < 1e-6 {
         format!("{:.1}", value)
+    } else {
+        format!("{:.2}", value)
     }
 }
 
@@ -68,6 +74,7 @@ pub struct Stepper {
     pub disabled: bool,
     pub font: Handle<Font>,
     pub icon_font: Handle<Font>,
+    pub style: Option<StepperStyle>,
 }
 
 impl Default for Stepper {
@@ -80,6 +87,7 @@ impl Default for Stepper {
             disabled: false,
             font: Handle::default(),
             icon_font: Handle::default(),
+            style: None,
         }
     }
 }
@@ -109,9 +117,12 @@ impl Stepper {
         self.icon_font = icon_font;
         self
     }
-}
 
-use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
+    pub fn style(mut self, style: StepperStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
+}
 
 impl Scene for Stepper {
     fn resolve(
@@ -119,7 +130,12 @@ impl Scene for Stepper {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let clamped_val = self.value.clamp(self.min, self.max);
+        let has_explicit_style = self.style.is_some();
+        let style = self.style.unwrap_or_default();
+        let colors = WidgetColors::default();
+        let lo = self.min.min(self.max);
+        let hi = self.min.max(self.max);
+        let clamped_val = self.value.clamp(lo, hi);
         let min = self.min;
         let max = self.max;
         let step = self.step;
@@ -128,24 +144,64 @@ impl Scene for Stepper {
         let font = self.font;
         let display_str = format_value(clamped_val, step);
 
+        let bg_color = if disabled {
+            colors.disabled_bg()
+        } else {
+            style.bg_color
+        };
+        let border_color = if disabled {
+            colors.disabled_border()
+        } else {
+            style.border_color
+        };
+        let btn_bg = if disabled {
+            colors.disabled_bg()
+        } else {
+            style.button_bg
+        };
+        let btn_colors = interaction_colors(btn_bg, style.button_hover, style.button_pressed, disabled);
+        let decr_colors = btn_colors.clone();
+        let incr_colors = btn_colors;
+        let text_color = if disabled {
+            colors.disabled_text()
+        } else {
+            style.text_color
+        };
+        let icon_color = if disabled {
+            colors.disabled_text()
+        } else {
+            Color::srgb(0.80, 0.85, 0.95)
+        };
+        let height = style.height;
+        let radius = style.radius;
+        let border_width = style.border_width;
+        let font_size = style.font_size;
+        let btn_h = (height - 8.0).max(20.0);
+        let btn_w = btn_h.max(26.0);
+        let btn_r = (radius - 2.0).max(4.0);
+        let focus_color = colors.focus_ring();
+        let luma_stepper = LumaStepper {
+            value: clamped_val,
+            min,
+            max,
+            step,
+            disabled,
+            style,
+            has_explicit_style,
+        };
+
         let s = bsn! {
-            LumaStepper {
-                value: clamped_val,
-                min,
-                max,
-                step,
-                disabled,
-            }
+            luma_stepper
             UNode {
-                height: UVal::Px(34.0),
-                background_color: STEPPER_BG,
-                border_radius: UCornerRadius::all(8.0),
+                height: { UVal::Px(height) },
+                background_color: bg_color,
+                border_radius: { UCornerRadius::all(radius) },
                 padding: USides::axes(4.0, 4.0),
             }
             UBorder {
-                color: STEPPER_BORDER,
-                width: 1.0,
-                radius: UCornerRadius::all(8.0),
+                color: border_color,
+                width: border_width,
+                radius: { UCornerRadius::all(radius) },
             }
             ULayout {
                 display: UDisplay::Flex,
@@ -157,30 +213,30 @@ impl Scene for Stepper {
                 // Decrement Button [-]
                 LumaStepperButton { is_increment: false }
                 UNode {
-                    width: UVal::Px(28.0),
-                    height: UVal::Px(26.0),
-                    background_color: BTN_BG_NORMAL,
-                    border_radius: UCornerRadius::all(6.0),
+                    width: { UVal::Px(btn_w) },
+                    height: { UVal::Px(btn_h) },
+                    background_color: btn_bg,
+                    border_radius: { UCornerRadius::all(btn_r) },
                 }
                 UInteraction::default()
-                UInteractionColors {
-                    normal: BTN_BG_NORMAL,
-                    hovered: BTN_BG_HOVER,
-                    pressed: BTN_BG_PRESSED,
+                decr_colors
+                UFocusable {
+                    enabled: { !disabled },
+                    ..UFocusable::default()
                 }
-                UFocusable::new()
-                UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
+                UFocusVisual::border(focus_color, 1.5)
                 ULayout {
                     display: UDisplay::Flex,
                     justify_content: UJustifyContent::Center,
                     align_items: UAlignItems::Center,
                 }
                 Children [
+                    LumaStepperIcon
                     UText {
                         text: { Icon::MINUS.to_string() },
                         font_size: 13.0,
                         font: { icon_font.clone() },
-                        color: Color::srgb(0.80, 0.85, 0.95),
+                        color: icon_color,
                     }
                 ]
                 --
@@ -197,39 +253,39 @@ impl Scene for Stepper {
                 Children [
                     UText {
                         text: display_str,
-                        font_size: 14.0,
+                        font_size,
                         font,
-                        color: Color::srgb(0.95, 0.96, 0.98),
+                        color: text_color,
                     }
                 ]
                 --
                 // Increment Button [+]
                 LumaStepperButton { is_increment: true }
                 UNode {
-                    width: UVal::Px(28.0),
-                    height: UVal::Px(26.0),
-                    background_color: BTN_BG_NORMAL,
-                    border_radius: UCornerRadius::all(6.0),
+                    width: { UVal::Px(btn_w) },
+                    height: { UVal::Px(btn_h) },
+                    background_color: btn_bg,
+                    border_radius: { UCornerRadius::all(btn_r) },
                 }
                 UInteraction::default()
-                UInteractionColors {
-                    normal: BTN_BG_NORMAL,
-                    hovered: BTN_BG_HOVER,
-                    pressed: BTN_BG_PRESSED,
+                incr_colors
+                UFocusable {
+                    enabled: { !disabled },
+                    ..UFocusable::default()
                 }
-                UFocusable::new()
-                UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.5)
+                UFocusVisual::border(focus_color, 1.5)
                 ULayout {
                     display: UDisplay::Flex,
                     justify_content: UJustifyContent::Center,
                     align_items: UAlignItems::Center,
                 }
                 Children [
+                    LumaStepperIcon
                     UText {
                         text: { Icon::PLUS.to_string() },
                         font_size: 13.0,
                         font: icon_font,
-                        color: Color::srgb(0.80, 0.85, 0.95),
+                        color: icon_color,
                     }
                 ]
             ]
@@ -251,55 +307,38 @@ pub fn luma_stepper(
     Stepper::new(value, min, max, step).font(font).icon_font(icon_font)
 }
 
-fn step_stepper(
-    target_entity: Entity,
+fn apply_stepper_step(
+    stepper_entity: Entity,
+    stepper: &mut LumaStepper,
+    children: &Children,
+    is_increment: bool,
     commands: &mut Commands,
-    parents_query: &Query<&ChildOf>,
-    button_query: &Query<&LumaStepperButton>,
-    stepper_query: &mut Query<(Entity, &mut LumaStepper, &Children)>,
     text_container_query: &Query<&Children, With<LumaStepperValueText>>,
     text_query: &mut Query<&mut UText>,
 ) {
-    let (is_increment, button_entity) = if let Ok(btn) = button_query.get(target_entity) {
-        (btn.is_increment, target_entity)
-    } else if let Ok(parent) = parents_query.get(target_entity) {
-        if let Ok(btn) = button_query.get(parent.get()) {
-            (btn.is_increment, parent.get())
-        } else {
-            return;
-        }
-    } else {
-        return;
-    };
-
-    let mut current = button_entity;
-    let mut stepper_entity_opt = None;
-    while let Ok(parent) = parents_query.get(current) {
-        current = parent.get();
-        if stepper_query.contains(current) {
-            stepper_entity_opt = Some(current);
-            break;
-        }
-    }
-
-    let Some(stepper_entity) = stepper_entity_opt else {
-        return;
-    };
-
-    let Ok((entity, mut stepper, children)) = stepper_query.get_mut(stepper_entity) else {
-        return;
-    };
-
     if stepper.disabled {
         return;
     }
 
-    if is_increment {
-        stepper.value = (stepper.value + stepper.step).min(stepper.max);
+    let raw = if is_increment {
+        stepper.value + stepper.step
     } else {
-        stepper.value = (stepper.value - stepper.step).max(stepper.min);
+        stepper.value - stepper.step
+    };
+    let stepped = if stepper.step > 0.0 {
+        stepper.min + ((raw - stepper.min) / stepper.step).round() * stepper.step
+    } else {
+        raw
+    };
+    let lo = stepper.min.min(stepper.max);
+    let hi = stepper.min.max(stepper.max);
+    let new_val = stepped.clamp(lo, hi);
+
+    if (new_val - stepper.value).abs() <= f64::EPSILON {
+        return;
     }
 
+    stepper.value = new_val;
     let new_str = format_value(stepper.value, stepper.step);
 
     for child in children.iter() {
@@ -309,15 +348,48 @@ fn step_stepper(
                     text.text = new_str.clone();
                 }
             }
-        } else if let Ok(mut text) = text_query.get_mut(child) {
-            text.text = new_str.clone();
         }
     }
 
     commands.trigger(StepperChanged {
-        entity,
+        entity: stepper_entity,
         value: stepper.value,
     });
+}
+
+fn step_stepper(
+    target_entity: Entity,
+    commands: &mut Commands,
+    parents_query: &Query<&ChildOf>,
+    button_query: &Query<&LumaStepperButton>,
+    stepper_query: &mut Query<(Entity, &mut LumaStepper, &Children)>,
+    text_container_query: &Query<&Children, With<LumaStepperValueText>>,
+    text_query: &mut Query<&mut UText>,
+) {
+    let Some(button_entity) = find_ancestor_or_self(target_entity, button_query, parents_query) else {
+        return;
+    };
+    let Ok(btn) = button_query.get(button_entity) else {
+        return;
+    };
+    let is_increment = btn.is_increment;
+
+    let Some(stepper_entity) = find_ancestor_or_self(button_entity, stepper_query, parents_query) else {
+        return;
+    };
+    let Ok((entity, mut stepper, children)) = stepper_query.get_mut(stepper_entity) else {
+        return;
+    };
+
+    apply_stepper_step(
+        entity,
+        &mut stepper,
+        children,
+        is_increment,
+        commands,
+        text_container_query,
+        text_query,
+    );
 }
 
 fn on_stepper_click(
@@ -329,7 +401,7 @@ fn on_stepper_click(
     text_container_query: Query<&Children, With<LumaStepperValueText>>,
     mut text_query: Query<&mut UText>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
     step_stepper(
@@ -363,6 +435,43 @@ fn on_stepper_activate(
     );
 }
 
+fn keyboard_stepper_system(
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
+    mut commands: Commands,
+    focused_buttons: Query<Entity, (With<LumaStepperButton>, With<UFocused>)>,
+    parents_query: Query<&ChildOf>,
+    mut stepper_query: Query<(Entity, &mut LumaStepper, &Children)>,
+    text_container_query: Query<&Children, With<LumaStepperValueText>>,
+    mut text_query: Query<&mut UText>,
+) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
+
+    let decr = keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::ArrowDown);
+    let incr = keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::ArrowUp);
+    if !decr && !incr {
+        return;
+    }
+
+    for btn_entity in focused_buttons.iter() {
+        let Some(stepper_entity) = find_ancestor_or_self(btn_entity, &stepper_query, &parents_query) else {
+            continue;
+        };
+        if let Ok((entity, mut stepper, children)) = stepper_query.get_mut(stepper_entity) {
+            apply_stepper_step(
+                entity,
+                &mut stepper,
+                children,
+                incr,
+                &mut commands,
+                &text_container_query,
+                &mut text_query,
+            );
+        }
+    }
+}
+
 pub struct LumaStepperPlugin;
 
 impl Plugin for LumaStepperPlugin {
@@ -370,7 +479,9 @@ impl Plugin for LumaStepperPlugin {
         app.register_type::<LumaStepper>()
             .register_type::<LumaStepperButton>()
             .register_type::<LumaStepperValueText>()
+            .register_type::<LumaStepperIcon>()
             .add_observer(on_stepper_click)
-            .add_observer(on_stepper_activate);
+            .add_observer(on_stepper_activate)
+            .add_systems(Update, keyboard_stepper_system);
     }
 }

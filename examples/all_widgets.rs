@@ -373,7 +373,7 @@ fn controls_tab_scene(font: Handle<Font>, icon_font: Handle<Font>) -> impl Scene
                     --
                     UNode { width: UVal::Px(270.0) }
                     Children [
-                        @{ MultiSelect::new("Framework tags...").tags(vec!["Bevy".into(), "SDF".into(), "Rust".into()]).font(font.clone()).icon_font(icon_font.clone()) }
+                        @{ MultiSelect::new("Framework tags...").tags(vec!["Bevy".into(), "SDF".into(), "Rust".into()]).options(vec!["Bevy", "SDF", "Rust", "UI", "Shaders", "WGSL"]).font(font.clone()).icon_font(icon_font.clone()) }
                     ]
                 ]
                 --
@@ -386,12 +386,12 @@ fn controls_tab_scene(font: Handle<Font>, icon_font: Handle<Font>) -> impl Scene
                 Children [
                     UNode { width: UVal::Px(270.0) }
                     Children [
-                        @{ Combobox { placeholder: "Filter branch...".into(), font: font.clone(), icon_font: icon_font.clone() } }
+                        @{ Combobox::new("Filter branch...").options(vec!["main", "develop", "feat/sdf-ui", "release/v1.0"]).font(font.clone()).icon_font(icon_font.clone()) }
                     ]
                     --
                     UNode { width: UVal::Px(270.0) }
                     Children [
-                        @{ TagInput { placeholder: "Add release tags...".into(), font: font.clone(), icon_font: icon_font.clone() } }
+                        @{ TagInput { placeholder: "Add release tags...".into(), font: font.clone(), icon_font: icon_font.clone(), ..default() } }
                     ]
                 ]
                 --

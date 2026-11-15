@@ -1,8 +1,14 @@
 //! Radio button widget with grouped single-choice selection.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{
+    dim_color, find_target_with_children, interaction_colors, is_primary_click, shift_brightness,
+    sync_focus_visual_border,
+};
+use crate::theme::{RadioStyle, WidgetColors};
 
 /// Marker and state component for a radio button.
 #[derive(Component, Clone, Debug, Reflect)]
@@ -11,6 +17,8 @@ pub struct LumaRadio {
     pub value: String,
     pub selected: bool,
     pub disabled: bool,
+    pub style: RadioStyle,
+    pub has_explicit_style: bool,
 }
 
 impl Default for LumaRadio {
@@ -20,6 +28,8 @@ impl Default for LumaRadio {
             value: String::new(),
             selected: false,
             disabled: false,
+            style: RadioStyle::default(),
+            has_explicit_style: false,
         }
     }
 }
@@ -36,12 +46,6 @@ pub struct RadioChanged {
     pub entity: Entity,
 }
 
-const SELECTED_COLOR: Color = Color::srgb_u8(0x1F, 0xD6, 0x9A);
-const UNSELECTED_BORDER: Color = Color::srgb_u8(0x2B, 0x2B, 0x30);
-const CIRCLE_BG: Color = Color::srgb_u8(0x12, 0x12, 0x14);
-
-use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
-
 /// Declarative Radio button widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]
 pub struct Radio {
@@ -51,6 +55,7 @@ pub struct Radio {
     pub selected: bool,
     pub disabled: bool,
     pub font: Handle<Font>,
+    pub style: Option<RadioStyle>,
 }
 
 impl Default for Radio {
@@ -62,6 +67,7 @@ impl Default for Radio {
             selected: false,
             disabled: false,
             font: Handle::default(),
+            style: None,
         }
     }
 }
@@ -94,6 +100,35 @@ impl Radio {
         self.font = font;
         self
     }
+
+    pub fn style(mut self, style: RadioStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
+}
+
+pub(crate) fn radio_visual_state(
+    style: &RadioStyle,
+    selected: bool,
+    disabled: bool,
+) -> (Color, Color, Color, UInteractionColors) {
+    let palette = WidgetColors::default();
+    if disabled {
+        let bg = palette.disabled_bg();
+        let border = palette.disabled_border();
+        let dot = if selected { dim_color(style.dot_color, 0.45) } else { Color::NONE };
+        return (bg, border, dot, interaction_colors(bg, bg, bg, true));
+    }
+
+    let bg = if selected { style.selected_bg } else { style.unselected_bg };
+    let border = if selected { style.selected_border } else { style.unselected_border };
+    let dot = if selected { style.dot_color } else { Color::NONE };
+    let (hovered, pressed) = if bg == palette.surface {
+        (palette.surface_hover, palette.secondary_pressed)
+    } else {
+        (shift_brightness(bg, 0.06), shift_brightness(bg, -0.06))
+    };
+    (bg, border, dot, interaction_colors(bg, hovered, pressed, false))
 }
 
 impl Scene for Radio {
@@ -102,12 +137,23 @@ impl Scene for Radio {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let border_color = if self.selected { SELECTED_COLOR } else { UNSELECTED_BORDER };
-        let dot_color = if self.selected { SELECTED_COLOR } else { Color::NONE };
+        let has_explicit_style = self.style.is_some();
+        let style = self.style.unwrap_or_default();
+        let palette = WidgetColors::default();
+
         let group = self.group;
         let value = self.value;
         let selected = self.selected;
         let disabled = self.disabled;
+        let (bg, border_color, dot_color, i_colors) = radio_visual_state(&style, selected, disabled);
+        let label_color = if disabled { palette.disabled_text() } else { style.label_color };
+        let focus_color = palette.focus_ring();
+        let size = style.size;
+        let radius = size * 0.5;
+        let dot_size = style.dot_size;
+        let dot_radius = dot_size * 0.5;
+        let border_width = style.border_width;
+        let label_font_size = style.font_size;
 
         let circle_node = bsn! {
             LumaRadio {
@@ -115,26 +161,27 @@ impl Scene for Radio {
                 value,
                 selected,
                 disabled,
+                style,
+                has_explicit_style,
             }
             UNode {
-                width: UVal::Px(20.0),
-                height: UVal::Px(20.0),
-                background_color: CIRCLE_BG,
-                border_radius: UCornerRadius::all(10.0),
+                width: UVal::Px(size),
+                height: UVal::Px(size),
+                background_color: bg,
+                border_radius: UCornerRadius::all(radius),
             }
             UBorder {
                 color: border_color,
-                width: 1.5,
-                radius: UCornerRadius::all(10.0),
+                width: border_width,
+                radius: UCornerRadius::all(radius),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: CIRCLE_BG,
-                hovered: Color::srgb(0.22, 0.26, 0.35),
-                pressed: Color::srgb(0.14, 0.17, 0.24),
+            i_colors
+            UFocusable {
+                enabled: { !disabled },
+                ..UFocusable::new()
             }
-            UFocusable::new()
-            UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 2.0)
+            UFocusVisual::border(focus_color, 2.0)
             ULayout {
                 display: UDisplay::Flex,
                 justify_content: UJustifyContent::Center,
@@ -143,10 +190,10 @@ impl Scene for Radio {
             Children [
                 LumaRadioDot
                 UNode {
-                    width: UVal::Px(10.0),
-                    height: UVal::Px(10.0),
+                    width: UVal::Px(dot_size),
+                    height: UVal::Px(dot_size),
                     background_color: dot_color,
-                    border_radius: UCornerRadius::all(5.0),
+                    border_radius: UCornerRadius::all(dot_radius),
                 }
             ]
         };
@@ -167,9 +214,9 @@ impl Scene for Radio {
                     --
                     UText {
                         text: label_str,
-                        font_size: 14.0,
+                        font_size: label_font_size,
                         font,
-                        color: Color::srgb(0.92, 0.94, 0.98),
+                        color: label_color,
                     }
                 ]
             };
@@ -205,18 +252,19 @@ fn select_radio(
     all_radios: &mut Query<(
         Entity,
         &mut LumaRadio,
+        &mut UNode,
         &mut UBorder,
         Option<&Children>,
         Option<&mut UFocusVisual>,
+        Option<&mut UInteractionColors>,
     )>,
-    dot_query: &mut Query<&mut UNode, With<LumaRadioDot>>,
+    dot_query: &mut Query<&mut UNode, (With<LumaRadioDot>, Without<LumaRadio>)>,
 ) {
-    // Check if target entity is a radio
-    let Ok((_, target_radio, _, _, _)) = all_radios.get(target_entity) else {
+    let Ok((_, target_radio, _, _, _, _, _)) = all_radios.get(target_entity) else {
         return;
     };
 
-    if target_radio.disabled {
+    if target_radio.disabled || target_radio.selected {
         return;
     }
 
@@ -224,28 +272,26 @@ fn select_radio(
     let selected_value = target_radio.value.clone();
 
     // Synchronize the entire group: select target, deselect others in same group
-    for (entity, mut radio, mut border, children, mut visual_opt) in all_radios.iter_mut() {
-        if radio.group == target_group {
-            let is_now_selected = entity == target_entity;
-            radio.selected = is_now_selected;
+    for (entity, mut radio, mut node, mut border, children, visual_opt, colors_opt) in all_radios.iter_mut() {
+        if radio.group != target_group {
+            continue;
+        }
+        let is_now_selected = entity == target_entity;
+        radio.selected = is_now_selected;
 
-            let target_border = if is_now_selected { SELECTED_COLOR } else { UNSELECTED_BORDER };
+        let (bg, target_border, target_dot, i_colors) =
+            radio_visual_state(&radio.style, is_now_selected, radio.disabled);
 
-            if let Some(ref mut visual) = visual_opt {
-                if visual.is_captured() {
-                    visual.set_original_border_color(target_border);
-                } else {
-                    border.color = target_border;
-                }
-            } else {
-                border.color = target_border;
-            }
+        node.background_color = bg;
+        if let Some(mut colors) = colors_opt {
+            *colors = i_colors;
+        }
+        sync_focus_visual_border(visual_opt, &mut border, target_border);
 
-            if let Some(children) = children {
-                for child in children.iter() {
-                    if let Ok(mut dot) = dot_query.get_mut(child) {
-                        dot.background_color = if is_now_selected { SELECTED_COLOR } else { Color::NONE };
-                    }
+        if let Some(children) = children {
+            for child in children.iter() {
+                if let Ok(mut dot) = dot_query.get_mut(child) {
+                    dot.background_color = target_dot;
                 }
             }
         }
@@ -264,27 +310,20 @@ fn on_radio_click(
     mut all_radios: Query<(
         Entity,
         &mut LumaRadio,
+        &mut UNode,
         &mut UBorder,
         Option<&Children>,
         Option<&mut UFocusVisual>,
+        Option<&mut UInteractionColors>,
     )>,
-    mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+    mut dot_query: Query<&mut UNode, (With<LumaRadioDot>, Without<LumaRadio>)>,
     parents_query: Query<&ChildOf>,
     children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
-    let target = if all_radios.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| all_radios.contains(e)) {
-        Some(ancestor)
-    } else if let Ok(children) = children_query.get(trigger.entity) {
-        children.iter().find(|&e| all_radios.contains(e))
-    } else {
-        None
-    };
-    if let Some(entity) = target {
+    if let Some(entity) = find_target_with_children(trigger.entity, &all_radios, &parents_query, &children_query) {
         select_radio(entity, &mut commands, &mut all_radios, &mut dot_query);
     }
 }
@@ -295,24 +334,17 @@ fn on_radio_activate(
     mut all_radios: Query<(
         Entity,
         &mut LumaRadio,
+        &mut UNode,
         &mut UBorder,
         Option<&Children>,
         Option<&mut UFocusVisual>,
+        Option<&mut UInteractionColors>,
     )>,
-    mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+    mut dot_query: Query<&mut UNode, (With<LumaRadioDot>, Without<LumaRadio>)>,
     parents_query: Query<&ChildOf>,
     children_query: Query<&Children>,
 ) {
-    let target = if all_radios.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else if let Some(ancestor) = parents_query.iter_ancestors(trigger.entity).find(|&e| all_radios.contains(e)) {
-        Some(ancestor)
-    } else if let Ok(children) = children_query.get(trigger.entity) {
-        children.iter().find(|&e| all_radios.contains(e))
-    } else {
-        None
-    };
-    if let Some(entity) = target {
+    if let Some(entity) = find_target_with_children(trigger.entity, &all_radios, &parents_query, &children_query) {
         select_radio(entity, &mut commands, &mut all_radios, &mut dot_query);
     }
 }
@@ -325,11 +357,13 @@ fn keyboard_radio_system(
     mut all_radios: Query<(
         Entity,
         &mut LumaRadio,
+        &mut UNode,
         &mut UBorder,
         Option<&Children>,
         Option<&mut UFocusVisual>,
+        Option<&mut UInteractionColors>,
     )>,
-    mut dot_query: Query<&mut UNode, With<LumaRadioDot>>,
+    mut dot_query: Query<&mut UNode, (With<LumaRadioDot>, Without<LumaRadio>)>,
 ) {
     let Some(keyboard) = keyboard else {
         return;
@@ -345,15 +379,15 @@ fn keyboard_radio_system(
         return;
     };
 
-    let Ok((_, focused_radio, _, _, _)) = all_radios.get(focused_entity) else {
+    let Ok((_, focused_radio, _, _, _, _, _)) = all_radios.get(focused_entity) else {
         return;
     };
     let target_group = focused_radio.group.clone();
 
     let group_entities: Vec<Entity> = all_radios
         .iter()
-        .filter(|(_, r, _, _, _)| r.group == target_group && !r.disabled)
-        .map(|(e, _, _, _, _)| e)
+        .filter(|(_, r, _, _, _, _, _)| r.group == target_group && !r.disabled)
+        .map(|(e, _, _, _, _, _, _)| e)
         .collect();
 
     if group_entities.is_empty() {

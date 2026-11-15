@@ -1,9 +1,11 @@
 //! Toast notification card widget with variant styles, dismiss button, and auto-dismiss timer.
 
-use bevy::ecs::relationship::Relationship;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{find_ancestor_or_self, is_primary_click};
+use crate::theme::{ToastStyle, WidgetColors};
 
 /// Semantic styling variant for toast notifications.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
@@ -51,7 +53,18 @@ impl ToastVariant {
 #[derive(Component, Clone, Debug, Default, Reflect)]
 pub struct LumaToast {
     pub variant: ToastVariant,
+    pub style: ToastStyle,
+    pub has_explicit_style: bool,
+    pub is_default_variant: bool,
 }
+
+/// Marker component for a toast notification's title text.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaToastTitle;
+
+/// Marker component for a toast notification's description text.
+#[derive(Component, Clone, Debug, Default, Reflect)]
+pub struct LumaToastDescription;
 
 /// Component specifying an auto-dismiss countdown timer for a toast.
 #[derive(Component, Clone, Debug, Reflect)]
@@ -75,10 +88,6 @@ pub struct LumaToastClose;
 #[derive(Event, Clone, Copy, Debug)]
 pub struct ToastDismissed(pub Entity);
 
-const TOAST_WIDTH: f32 = 360.0;
-const TOAST_TITLE_COLOR: Color = Color::srgb(0.96, 0.97, 0.99);
-const TOAST_DESC_COLOR: Color = Color::srgb(0.68, 0.72, 0.82);
-
 /// Declarative Toast widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]
 pub struct Toast {
@@ -88,6 +97,7 @@ pub struct Toast {
     pub duration_secs: Option<f32>,
     pub font: Handle<Font>,
     pub icon_font: Handle<Font>,
+    pub style: Option<ToastStyle>,
 }
 
 impl Default for Toast {
@@ -99,6 +109,7 @@ impl Default for Toast {
             duration_secs: None,
             font: Handle::default(),
             icon_font: Handle::default(),
+            style: None,
         }
     }
 }
@@ -147,6 +158,11 @@ impl Toast {
         self.icon_font = icon_font;
         self
     }
+
+    pub fn style(mut self, style: ToastStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
 }
 
 impl Scene for Toast {
@@ -155,29 +171,138 @@ impl Scene for Toast {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
-        let (bg, border, icon_color, icon) = self.variant.colors();
+        let has_explicit_style = self.style.is_some();
+        let is_default_variant = self.variant == ToastVariant::Info;
+        let toast_style = self.style.unwrap_or_default();
+        let (variant_bg, variant_border, icon_color, icon) = self.variant.colors();
+        let bg = if has_explicit_style {
+            toast_style.bg_color
+        } else {
+            variant_bg
+        };
+        let border = if has_explicit_style {
+            toast_style.border_color
+        } else {
+            variant_border
+        };
+        let max_width = toast_style.max_width;
+        let radius = toast_style.radius;
+        let padding = toast_style.padding;
+        let border_width = toast_style.border_width;
+        let title_color = toast_style.title_color;
+        let message_color = toast_style.message_color;
+        let colors = WidgetColors::default();
+        let close_hover = colors.ghost_hover();
+        let close_pressed = colors.ghost_pressed();
+        let focus_ring = colors.focus_ring();
+        let close_icon_color = colors.text_dim;
+
         let variant = self.variant;
         let title = self.title;
         let description = self.description;
         let font = self.font;
         let icon_font = self.icon_font;
 
+        let status_icon = bsn! {
+            UNode {
+                width: UVal::Px(24.0),
+                height: UVal::Px(24.0),
+            }
+            ULayout {
+                display: UDisplay::Flex,
+                justify_content: UJustifyContent::Center,
+                align_items: UAlignItems::Center,
+            }
+            Children [
+                UText {
+                    text: { icon.to_string() },
+                    font_size: 16.0,
+                    font: { icon_font.clone() },
+                    color: icon_color,
+                }
+            ]
+        };
+
+        let message_body = bsn! {
+            UNode::default()
+            USelf {
+                flex_grow: { Some(1.0) },
+            }
+            ULayout {
+                display: UDisplay::Flex,
+                flex_direction: UFlexDirection::Column,
+                gap: 3.0,
+            }
+            Children [
+                LumaToastTitle
+                UText {
+                    text: title,
+                    font_size: 14.0,
+                    font: { font.clone() },
+                    color: title_color,
+                }
+                --
+                LumaToastDescription
+                UText {
+                    text: description,
+                    font_size: 12.0,
+                    font: { font.clone() },
+                    color: message_color,
+                }
+            ]
+        };
+
+        let close_btn = bsn! {
+            LumaToastClose
+            UNode {
+                width: UVal::Px(20.0),
+                height: UVal::Px(20.0),
+                border_radius: UCornerRadius::all(4.0),
+            }
+            UInteraction::default()
+            UInteractionColors {
+                normal: Color::NONE,
+                hovered: close_hover,
+                pressed: close_pressed,
+            }
+            UFocusable::new()
+            UFocusVisual::border(focus_ring, 1.0)
+            ULayout {
+                display: UDisplay::Flex,
+                justify_content: UJustifyContent::Center,
+                align_items: UAlignItems::Center,
+            }
+            Children [
+                UText {
+                    text: { Icon::X.to_string() },
+                    font_size: 13.0,
+                    font: icon_font,
+                    color: close_icon_color,
+                }
+            ]
+        };
+
         if let Some(duration_secs) = self.duration_secs {
             let s = bsn! {
-                LumaToast { variant }
+                LumaToast {
+                    variant,
+                    style: toast_style,
+                    has_explicit_style,
+                    is_default_variant,
+                }
                 LumaToastTimer {
                     timer: { Timer::from_seconds(duration_secs, TimerMode::Once) },
                 }
                 UNode {
-                    width: UVal::Px(TOAST_WIDTH),
+                    width: UVal::Px(max_width),
                     background_color: bg,
-                    border_radius: UCornerRadius::all(10.0),
-                    padding: USides::all(14.0),
+                    border_radius: UCornerRadius::all(radius),
+                    padding,
                 }
                 UBorder {
                     color: border,
-                    width: 1.0,
-                    radius: UCornerRadius::all(10.0),
+                    width: border_width,
+                    radius: UCornerRadius::all(radius),
                 }
                 ULayout {
                     display: UDisplay::Flex,
@@ -186,95 +311,32 @@ impl Scene for Toast {
                     gap: 12.0,
                 }
                 Children [
-                    // Status Icon Box
-                    UNode {
-                        width: UVal::Px(24.0),
-                        height: UVal::Px(24.0),
-                    }
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        UText {
-                            text: { icon.to_string() },
-                            font_size: 16.0,
-                            font: { icon_font.clone() },
-                            color: icon_color,
-                        }
-                    ]
+                    @{status_icon}
                     --
-                    // Message Body (Title & Description)
-                    UNode::default()
-                    USelf {
-                        flex_grow: { Some(1.0) },
-                    }
-                    ULayout {
-                        display: UDisplay::Flex,
-                        flex_direction: UFlexDirection::Column,
-                        gap: 3.0,
-                    }
-                    Children [
-                        UText {
-                            text: title,
-                            font_size: 14.0,
-                            font: { font.clone() },
-                            color: TOAST_TITLE_COLOR,
-                        }
-                        --
-                        UText {
-                            text: description,
-                            font_size: 12.0,
-                            font: { font.clone() },
-                            color: TOAST_DESC_COLOR,
-                        }
-                    ]
+                    @{message_body}
                     --
-                    // Close Button
-                    LumaToastClose
-                    UNode {
-                        width: UVal::Px(20.0),
-                        height: UVal::Px(20.0),
-                        border_radius: UCornerRadius::all(4.0),
-                    }
-                    UInteraction::default()
-                    UInteractionColors {
-                        normal: Color::NONE,
-                        hovered: Color::srgba(1.0, 1.0, 1.0, 0.10),
-                        pressed: Color::srgba(1.0, 1.0, 1.0, 0.20),
-                    }
-                    UFocusable::new()
-                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        UText {
-                            text: { Icon::X.to_string() },
-                            font_size: 13.0,
-                            font: icon_font,
-                            color: Color::srgb(0.60, 0.65, 0.75),
-                        }
-                    ]
+                    @{close_btn}
                 ]
             };
             s.resolve(context, scene)
         } else {
             let s = bsn! {
-                LumaToast { variant }
+                LumaToast {
+                    variant,
+                    style: toast_style,
+                    has_explicit_style,
+                    is_default_variant,
+                }
                 UNode {
-                    width: UVal::Px(TOAST_WIDTH),
+                    width: UVal::Px(max_width),
                     background_color: bg,
-                    border_radius: UCornerRadius::all(10.0),
-                    padding: USides::all(14.0),
+                    border_radius: UCornerRadius::all(radius),
+                    padding,
                 }
                 UBorder {
                     color: border,
-                    width: 1.0,
-                    radius: UCornerRadius::all(10.0),
+                    width: border_width,
+                    radius: UCornerRadius::all(radius),
                 }
                 ULayout {
                     display: UDisplay::Flex,
@@ -283,79 +345,11 @@ impl Scene for Toast {
                     gap: 12.0,
                 }
                 Children [
-                    // Status Icon Box
-                    UNode {
-                        width: UVal::Px(24.0),
-                        height: UVal::Px(24.0),
-                    }
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        UText {
-                            text: { icon.to_string() },
-                            font_size: 16.0,
-                            font: { icon_font.clone() },
-                            color: icon_color,
-                        }
-                    ]
+                    @{status_icon}
                     --
-                    // Message Body (Title & Description)
-                    UNode::default()
-                    USelf {
-                        flex_grow: { Some(1.0) },
-                    }
-                    ULayout {
-                        display: UDisplay::Flex,
-                        flex_direction: UFlexDirection::Column,
-                        gap: 3.0,
-                    }
-                    Children [
-                        UText {
-                            text: title,
-                            font_size: 14.0,
-                            font: { font.clone() },
-                            color: TOAST_TITLE_COLOR,
-                        }
-                        --
-                        UText {
-                            text: description,
-                            font_size: 12.0,
-                            font: { font.clone() },
-                            color: TOAST_DESC_COLOR,
-                        }
-                    ]
+                    @{message_body}
                     --
-                    // Close Button
-                    LumaToastClose
-                    UNode {
-                        width: UVal::Px(20.0),
-                        height: UVal::Px(20.0),
-                        border_radius: UCornerRadius::all(4.0),
-                    }
-                    UInteraction::default()
-                    UInteractionColors {
-                        normal: Color::NONE,
-                        hovered: Color::srgba(1.0, 1.0, 1.0, 0.10),
-                        pressed: Color::srgba(1.0, 1.0, 1.0, 0.20),
-                    }
-                    UFocusable::new()
-                    UFocusVisual::border(Color::srgb(0.35, 0.65, 1.0), 1.0)
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                    }
-                    Children [
-                        UText {
-                            text: { Icon::X.to_string() },
-                            font_size: 13.0,
-                            font: icon_font,
-                            color: Color::srgb(0.60, 0.65, 0.75),
-                        }
-                    ]
+                    @{close_btn}
                 ]
             };
             s.resolve(context, scene)
@@ -400,28 +394,18 @@ fn dismiss_toast(
     close_query: &Query<&LumaToastClose>,
     toast_query: &Query<&LumaToast>,
 ) {
-    let close_entity = if close_query.contains(target_entity) {
-        target_entity
-    } else if let Ok(parent) = parents_query.get(target_entity) {
-        if close_query.contains(parent.get()) {
-            parent.get()
-        } else {
-            return;
-        }
-    } else {
+    let Some(close_entity) = find_ancestor_or_self(target_entity, close_query, parents_query)
+    else {
+        return;
+    };
+    let Some(toast_entity) = find_ancestor_or_self(close_entity, toast_query, parents_query)
+    else {
         return;
     };
 
-    let mut current = close_entity;
-    while let Ok(parent) = parents_query.get(current) {
-        current = parent.get();
-        if toast_query.contains(current) {
-            commands.trigger(ToastDismissed(current));
-            if let Ok(mut cmd) = commands.get_entity(current) {
-                cmd.try_despawn();
-            }
-            break;
-        }
+    commands.trigger(ToastDismissed(toast_entity));
+    if let Ok(mut cmd) = commands.get_entity(toast_entity) {
+        cmd.try_despawn();
     }
 }
 
@@ -432,7 +416,7 @@ fn on_toast_close_click(
     close_query: Query<&LumaToastClose>,
     toast_query: Query<&LumaToast>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
     dismiss_toast(
@@ -484,6 +468,8 @@ pub struct LumaToastPlugin;
 impl Plugin for LumaToastPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<LumaToast>()
+            .register_type::<LumaToastTitle>()
+            .register_type::<LumaToastDescription>()
             .register_type::<ToastVariant>()
             .register_type::<LumaToastTimer>()
             .add_observer(on_toast_close_click)

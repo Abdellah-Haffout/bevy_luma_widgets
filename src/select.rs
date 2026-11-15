@@ -9,13 +9,15 @@
 //! - Keyboard navigation (closes on `Escape`).
 //! - Auto-flipping: opens upward if near the bottom edge of the screen.
 
-use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
 
+use crate::helpers::{
+    find_ancestor_or_self, interaction_colors, is_primary_click, visit_descendants, DescendantVisit,
+};
 use crate::navigation::SceneList;
-use crate::theme::SelectStyle;
+use crate::theme::{SelectStyle, WidgetColors};
 
 /// Single option entry in a Select menu.
 #[derive(Clone, Debug, PartialEq, Eq, Reflect)]
@@ -42,6 +44,7 @@ pub struct LumaSelect {
     pub placeholder: String,
     pub options: Vec<SelectOption>,
     pub style: SelectStyle,
+    pub has_explicit_style: bool,
     #[reflect(ignore)]
     pub overlay_entity: Option<Entity>,
 }
@@ -55,6 +58,7 @@ impl Default for LumaSelect {
             placeholder: "Select an option...".to_string(),
             options: Vec::new(),
             style: SelectStyle::default(),
+            has_explicit_style: false,
             overlay_entity: None,
         }
     }
@@ -199,7 +203,10 @@ impl Scene for Select {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let has_explicit_style = self.style.is_some();
         let style = self.style.unwrap_or_default();
+        let disabled = self.disabled;
+        let palette = WidgetColors::default();
 
         let display_text = if let Some(idx) = self.selected_index {
             self.options
@@ -211,26 +218,39 @@ impl Scene for Select {
         };
 
         let is_placeholder = self.selected_index.is_none();
-        let text_color = if is_placeholder {
-            Color::srgb(0.50, 0.55, 0.65)
+        let text_color = if disabled {
+            palette.disabled_text()
+        } else if is_placeholder {
+            palette.text_dim
         } else {
             style.text_color
         };
 
         let min_height = style.min_height;
-        let bg_color = style.bg_color;
-        let bg_hover = style.bg_hover;
+        let trigger_bg = if disabled {
+            palette.disabled_bg()
+        } else {
+            style.bg_color
+        };
+        let trigger_border = if disabled {
+            palette.disabled_border()
+        } else {
+            style.border_color
+        };
         let radius = style.radius;
         let padding = style.padding;
-        let border_color = style.border_color;
         let border_width = style.border_width;
         let border_focus = style.border_focus;
         let font_size = style.font_size;
-        let icon_color = style.text_color;
+        let icon_color = if disabled {
+            palette.disabled_text()
+        } else {
+            style.text_color
+        };
+        let i_colors = interaction_colors(trigger_bg, style.bg_hover, style.bg_hover, disabled);
 
         let selected_index = self.selected_index;
-        let disabled = self.disabled;
-        let font = self.font.clone();
+        let font = self.font;
         let icon_font = self.icon_font.clone();
         let placeholder = self.placeholder.clone();
         let options = self.options.clone();
@@ -244,28 +264,28 @@ impl Scene for Select {
                 placeholder,
                 options,
                 style: select_style,
+                has_explicit_style,
                 overlay_entity: None,
             }
             UNode {
                 width: UVal::Percent(1.0),
                 min_height,
-                background_color: bg_color,
+                background_color: trigger_bg,
                 border_radius: UCornerRadius::all(radius),
                 padding,
             }
             LumaSelectTrigger
             UBorder {
-                color: border_color,
+                color: trigger_border,
                 width: border_width,
                 radius: UCornerRadius::all(radius),
             }
             UInteraction::default()
-            UInteractionColors {
-                normal: bg_color,
-                hovered: bg_hover,
-                pressed: bg_hover,
+            i_colors
+            UFocusable {
+                enabled: { !disabled },
+                ..UFocusable::new()
             }
-            UFocusable::new()
             UFocusVisual::border(border_focus, 2.0)
             ULayout {
                 display: UDisplay::Flex,
@@ -451,7 +471,7 @@ impl Scene for SelectOverlayScene {
                     gap: item_gap,
                 }
                 Children [
-                    @{options_scene}
+                    {options_scene}
                 ]
             ]
         };
@@ -460,27 +480,54 @@ impl Scene for SelectOverlayScene {
     }
 }
 
+fn set_select_chevron(
+    children: &Children,
+    icon: &'static str,
+    chevron_query: &mut Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
+    children_query: &Query<&Children>,
+) {
+    for &child in children {
+        visit_descendants(child, children_query, |e| {
+            if let Ok(mut text) = chevron_query.get_mut(e) {
+                text.text = icon.to_string();
+            }
+            DescendantVisit::Continue
+        });
+    }
+}
+
+fn close_select_menu(
+    commands: &mut Commands,
+    select: &mut LumaSelect,
+    children: &Children,
+    chevron_query: &mut Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
+    children_query: &Query<&Children>,
+) {
+    select.is_open = false;
+    if let Some(overlay) = select.overlay_entity.take() {
+        if let Ok(mut cmd) = commands.get_entity(overlay) {
+            cmd.try_despawn();
+        }
+    }
+    set_select_chevron(children, Icon::CHEVRON_DOWN, chevron_query, children_query);
+}
+
+#[allow(clippy::too_many_arguments)]
 fn toggle_select(
     trigger_entity: Entity,
     commands: &mut Commands,
-    theme: &Theme,
+    theme: Option<&Theme>,
     windows: &Query<&Window>,
     cameras: &Query<(&Camera, &GlobalTransform)>,
     parents_query: &Query<&ChildOf>,
     trigger_transform_query: &Query<(&GlobalTransform, &ComputedSize)>,
     select_query: &mut Query<(Entity, &mut LumaSelect, &Children)>,
-    chevron_query: &mut Query<&mut UText, With<LumaSelectChevron>>,
+    chevron_query: &mut Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
+    text_query: &Query<&UText, (With<LumaSelectText>, Without<LumaSelectChevron>)>,
     children_query: &Query<&Children>,
 ) {
-    let select_target = if select_query.contains(trigger_entity) {
-        Some(trigger_entity)
-    } else {
-        parents_query
-            .iter_ancestors(trigger_entity)
-            .find(|&e| select_query.contains(e))
-    };
-
-    let Some(select_entity) = select_target else {
+    let Some(select_entity) = find_ancestor_or_self(trigger_entity, select_query, parents_query)
+    else {
         return;
     };
 
@@ -492,44 +539,20 @@ fn toggle_select(
     }
 
     if select.is_open {
-        select.is_open = false;
-        if let Some(overlay) = select.overlay_entity.take() {
-            commands.entity(overlay).despawn();
-        }
-        for child in children.iter() {
-            if let Ok(mut text) = chevron_query.get_mut(child) {
-                text.text = Icon::CHEVRON_DOWN.to_string();
-            }
-            if let Ok(sub_children) = children_query.get(child) {
-                for sub in sub_children.iter() {
-                    if let Ok(mut text) = chevron_query.get_mut(sub) {
-                        text.text = Icon::CHEVRON_DOWN.to_string();
-                    }
-                }
-            }
-        }
+        close_select_menu(commands, &mut select, children, chevron_query, children_query);
         return;
     }
 
     // Close any other open select menus first
     for (other_entity, mut other_select, other_children) in select_query.iter_mut() {
         if other_entity != select_entity && other_select.is_open {
-            other_select.is_open = false;
-            if let Some(overlay) = other_select.overlay_entity.take() {
-                commands.entity(overlay).despawn();
-            }
-            for child in other_children.iter() {
-                if let Ok(mut text) = chevron_query.get_mut(child) {
-                    text.text = Icon::CHEVRON_DOWN.to_string();
-                }
-                if let Ok(sub_children) = children_query.get(child) {
-                    for sub in sub_children.iter() {
-                        if let Ok(mut text) = chevron_query.get_mut(sub) {
-                            text.text = Icon::CHEVRON_DOWN.to_string();
-                        }
-                    }
-                }
-            }
+            close_select_menu(
+                commands,
+                &mut other_select,
+                other_children,
+                chevron_query,
+                children_query,
+            );
         }
     }
 
@@ -587,6 +610,29 @@ fn toggle_select(
     };
     let menu_left = trigger_left.clamp(4.0, (win_w - menu_width - 4.0).max(4.0));
 
+    let mut select_font = Handle::default();
+    for &child in children {
+        visit_descendants(child, children_query, |e| {
+            if let Ok(text) = text_query.get(e) {
+                if text.font != Handle::default() {
+                    select_font = text.font.clone();
+                    return DescendantVisit::Stop;
+                }
+            }
+            DescendantVisit::Continue
+        });
+        if select_font != Handle::default() {
+            break;
+        }
+    }
+    let font = if select_font != Handle::default() {
+        select_font
+    } else {
+        theme
+            .map(|t| t.text.font.inter_regular.clone())
+            .unwrap_or_default()
+    };
+
     let overlay_scene = SelectOverlayScene {
         select_entity,
         menu_left,
@@ -598,63 +644,49 @@ fn toggle_select(
         style: select.style.clone(),
         options: select.options.clone(),
         selected_index: select.selected_index,
-        font: theme.text.font.inter_regular.clone(),
+        font,
     };
 
     let overlay_id = commands.spawn_scene(overlay_scene).id();
     select.overlay_entity = Some(overlay_id);
     select.is_open = true;
 
-    for child in children.iter() {
-        if let Ok(mut text) = chevron_query.get_mut(child) {
-            text.text = Icon::CHEVRON_UP.to_string();
-        }
-        if let Ok(sub_children) = children_query.get(child) {
-            for sub in sub_children.iter() {
-                if let Ok(mut text) = chevron_query.get_mut(sub) {
-                    text.text = Icon::CHEVRON_UP.to_string();
-                }
-            }
-        }
-    }
+    set_select_chevron(children, Icon::CHEVRON_UP, chevron_query, children_query);
 }
 
 fn on_select_trigger_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
-    theme: Res<Theme>,
+    theme: Option<Res<Theme>>,
     trigger_query: Query<&LumaSelectTrigger>,
     parents_query: Query<&ChildOf>,
     windows: Query<&Window>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     trigger_transform_query: Query<(&GlobalTransform, &ComputedSize)>,
     mut select_query: Query<(Entity, &mut LumaSelect, &Children)>,
-    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    mut chevron_query: Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
+    text_query: Query<&UText, (With<LumaSelectText>, Without<LumaSelectChevron>)>,
     children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
 
-    let is_trigger = trigger_query.contains(trigger.entity)
-        || parents_query
-            .iter_ancestors(trigger.entity)
-            .any(|e| trigger_query.contains(e));
-
-    if !is_trigger {
+    if find_ancestor_or_self(trigger.entity, &trigger_query, &parents_query).is_none() {
         return;
     }
 
     toggle_select(
         trigger.entity,
         &mut commands,
-        &theme,
+        theme.as_deref(),
         &windows,
         &cameras,
         &parents_query,
         &trigger_transform_query,
         &mut select_query,
         &mut chevron_query,
+        &text_query,
         &children_query,
     );
 }
@@ -662,25 +694,27 @@ fn on_select_trigger_click(
 fn on_select_trigger_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
-    theme: Res<Theme>,
+    theme: Option<Res<Theme>>,
     parents_query: Query<&ChildOf>,
     windows: Query<&Window>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     trigger_transform_query: Query<(&GlobalTransform, &ComputedSize)>,
     mut select_query: Query<(Entity, &mut LumaSelect, &Children)>,
-    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    mut chevron_query: Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
+    text_query: Query<&UText, (With<LumaSelectText>, Without<LumaSelectChevron>)>,
     children_query: Query<&Children>,
 ) {
     toggle_select(
         trigger.entity,
         &mut commands,
-        &theme,
+        theme.as_deref(),
         &windows,
         &cameras,
         &parents_query,
         &trigger_transform_query,
         &mut select_query,
         &mut chevron_query,
+        &text_query,
         &children_query,
     );
 }
@@ -691,23 +725,16 @@ fn on_select_option_click(
     option_query: Query<&LumaSelectOptionItem>,
     parents_query: Query<&ChildOf>,
     mut select_query: Query<(Entity, &mut LumaSelect, &Children)>,
-    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    mut chevron_query: Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
     mut text_query: Query<&mut UText, (With<LumaSelectText>, Without<LumaSelectChevron>)>,
     children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
 
-    let option_target = if option_query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query
-            .iter_ancestors(trigger.entity)
-            .find(|&e| option_query.contains(e))
-    };
-
-    let Some(opt_entity) = option_target else {
+    let Some(opt_entity) = find_ancestor_or_self(trigger.entity, &option_query, &parents_query)
+    else {
         return;
     };
     let Ok(opt_item) = option_query.get(opt_entity) else {
@@ -727,43 +754,23 @@ fn on_select_option_click(
     }
 
     select.selected_index = Some(opt_index);
-    select.is_open = false;
-    if let Some(overlay) = select.overlay_entity.take() {
-        commands.entity(overlay).despawn();
-    }
+    close_select_menu(
+        &mut commands,
+        &mut select,
+        children,
+        &mut chevron_query,
+        &children_query,
+    );
 
-    // Update label text and chevron on the trigger
-    for child in children.iter() {
-        if let Ok(mut text) = text_query.get_mut(child) {
-            text.text = opt_label.clone();
-            text.color = select.style.text_color;
-        }
-        if let Ok(mut text) = chevron_query.get_mut(child) {
-            text.text = Icon::CHEVRON_DOWN.to_string();
-        }
-
-        if let Ok(sub_children) = children_query.get(child) {
-            for sub in sub_children.iter() {
-                if let Ok(mut text) = text_query.get_mut(sub) {
-                    text.text = opt_label.clone();
-                    text.color = select.style.text_color;
-                }
-                if let Ok(mut text) = chevron_query.get_mut(sub) {
-                    text.text = Icon::CHEVRON_DOWN.to_string();
-                }
-                if let Ok(grand_children) = children_query.get(sub) {
-                    for grand in grand_children.iter() {
-                        if let Ok(mut text) = text_query.get_mut(grand) {
-                            text.text = opt_label.clone();
-                            text.color = select.style.text_color;
-                        }
-                        if let Ok(mut text) = chevron_query.get_mut(grand) {
-                            text.text = Icon::CHEVRON_DOWN.to_string();
-                        }
-                    }
-                }
+    let text_color = select.style.text_color;
+    for &child in children {
+        visit_descendants(child, &children_query, |e| {
+            if let Ok(mut text) = text_query.get_mut(e) {
+                text.text = opt_label.clone();
+                text.color = text_color;
             }
-        }
+            DescendantVisit::Continue
+        });
     }
 
     commands.trigger(SelectChanged {
@@ -780,31 +787,21 @@ fn on_select_backdrop_click(
     parents_query: Query<&ChildOf>,
     menu_query: Query<&LumaSelectMenu>,
     mut select_query: Query<(&mut LumaSelect, &Children)>,
-    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    mut chevron_query: Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
     children_query: Query<&Children>,
 ) {
-    if trigger.event().button != PointerButton::Primary {
+    if !is_primary_click(&trigger) {
         return;
     }
 
     // If the click is inside the menu card (or its children), ignore
-    let is_inside_menu = menu_query.contains(trigger.entity)
-        || parents_query
-            .iter_ancestors(trigger.entity)
-            .any(|e| menu_query.contains(e));
-    if is_inside_menu {
+    if find_ancestor_or_self(trigger.entity, &menu_query, &parents_query).is_some() {
         return;
     }
 
-    let backdrop_target = if backdrop_query.contains(trigger.entity) {
-        Some(trigger.entity)
-    } else {
-        parents_query
-            .iter_ancestors(trigger.entity)
-            .find(|&e| backdrop_query.contains(e))
-    };
-
-    let Some(backdrop_entity) = backdrop_target else {
+    let Some(backdrop_entity) =
+        find_ancestor_or_self(trigger.entity, &backdrop_query, &parents_query)
+    else {
         return;
     };
     let Ok(backdrop) = backdrop_query.get(backdrop_entity) else {
@@ -816,51 +813,35 @@ fn on_select_backdrop_click(
         return;
     };
 
-    select.is_open = false;
-    if let Some(overlay) = select.overlay_entity.take() {
-        commands.entity(overlay).despawn();
-    }
-
-    for child in children.iter() {
-        if let Ok(mut text) = chevron_query.get_mut(child) {
-            text.text = Icon::CHEVRON_DOWN.to_string();
-        }
-        if let Ok(sub_children) = children_query.get(child) {
-            for sub in sub_children.iter() {
-                if let Ok(mut text) = chevron_query.get_mut(sub) {
-                    text.text = Icon::CHEVRON_DOWN.to_string();
-                }
-            }
-        }
-    }
+    close_select_menu(
+        &mut commands,
+        &mut select,
+        children,
+        &mut chevron_query,
+        &children_query,
+    );
 }
 
 fn close_select_on_escape(
     mut commands: Commands,
-    keyboard: Res<ButtonInput<KeyCode>>,
+    keyboard: Option<Res<ButtonInput<KeyCode>>>,
     mut select_query: Query<(&mut LumaSelect, &Children)>,
-    mut chevron_query: Query<&mut UText, With<LumaSelectChevron>>,
+    mut chevron_query: Query<&mut UText, (With<LumaSelectChevron>, Without<LumaSelectText>)>,
     children_query: Query<&Children>,
 ) {
+    let Some(keyboard) = keyboard else {
+        return;
+    };
     if keyboard.just_pressed(KeyCode::Escape) {
         for (mut select, children) in select_query.iter_mut() {
             if select.is_open {
-                select.is_open = false;
-                if let Some(overlay) = select.overlay_entity.take() {
-                    commands.entity(overlay).despawn();
-                }
-                for child in children.iter() {
-                    if let Ok(mut text) = chevron_query.get_mut(child) {
-                        text.text = Icon::CHEVRON_DOWN.to_string();
-                    }
-                    if let Ok(sub_children) = children_query.get(child) {
-                        for sub in sub_children.iter() {
-                            if let Ok(mut text) = chevron_query.get_mut(sub) {
-                                text.text = Icon::CHEVRON_DOWN.to_string();
-                            }
-                        }
-                    }
-                }
+                close_select_menu(
+                    &mut commands,
+                    &mut select,
+                    children,
+                    &mut chevron_query,
+                    &children_query,
+                );
             }
         }
     }
@@ -873,7 +854,9 @@ fn cleanup_orphaned_select_overlays(
 ) {
     for (overlay_entity, overlay) in overlay_query.iter() {
         if !select_query.contains(overlay.select_entity) {
-            commands.entity(overlay_entity).despawn();
+            if let Ok(mut cmd) = commands.get_entity(overlay_entity) {
+                cmd.try_despawn();
+            }
         }
     }
 }

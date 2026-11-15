@@ -4,6 +4,9 @@ use bevy::prelude::*;
 use bevy::scene::{ResolveContext, ResolveSceneError, ResolvedScene};
 use bevy_luma::prelude::*;
 
+use crate::helpers::ConditionalScene;
+use crate::theme::{ProgressStyle, WidgetColors};
+
 /// Styling variant for a progress indicator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Reflect)]
 pub enum ProgressVariant {
@@ -16,11 +19,12 @@ pub enum ProgressVariant {
 
 impl ProgressVariant {
     pub fn color(&self) -> Color {
+        let c = WidgetColors::default();
         match self {
-            ProgressVariant::Default => Color::srgb(0.20, 0.45, 0.90),
-            ProgressVariant::Success => Color::srgb(0.16, 0.75, 0.45),
-            ProgressVariant::Warning => Color::srgb(0.95, 0.65, 0.15),
-            ProgressVariant::Danger => Color::srgb(0.85, 0.22, 0.28),
+            ProgressVariant::Default => c.primary,
+            ProgressVariant::Success => c.success,
+            ProgressVariant::Warning => c.warning,
+            ProgressVariant::Danger => c.danger,
         }
     }
 }
@@ -34,6 +38,10 @@ impl ProgressVariant {
 pub struct LumaProgressBar {
     pub value: f32, // 0.0 to 1.0
     pub variant: ProgressVariant,
+    pub style: ProgressStyle,
+    pub has_explicit_style: bool,
+    pub has_explicit_height: bool,
+    pub is_default_variant: bool,
 }
 
 impl Default for LumaProgressBar {
@@ -41,6 +49,10 @@ impl Default for LumaProgressBar {
         Self {
             value: 0.0,
             variant: ProgressVariant::Default,
+            style: ProgressStyle::default(),
+            has_explicit_style: false,
+            has_explicit_height: false,
+            is_default_variant: true,
         }
     }
 }
@@ -56,6 +68,7 @@ pub struct ProgressBar {
     pub width: UVal,
     pub height: f32,
     pub variant: ProgressVariant,
+    pub style: Option<ProgressStyle>,
 }
 
 impl Default for ProgressBar {
@@ -65,6 +78,7 @@ impl Default for ProgressBar {
             width: UVal::Px(200.0),
             height: 8.0,
             variant: ProgressVariant::Default,
+            style: None,
         }
     }
 }
@@ -97,6 +111,11 @@ impl ProgressBar {
         self
     }
 
+    pub fn style(mut self, style: ProgressStyle) -> Self {
+        self.style = Some(style);
+        self
+    }
+
     /// Convenience constructor for a circular progress indicator.
     pub fn circle(value: f32) -> CircularProgress {
         CircularProgress::new(value)
@@ -111,26 +130,52 @@ impl Scene for ProgressBar {
     ) -> Result<(), ResolveSceneError> {
         let clamped = self.value.clamp(0.0, 1.0);
         let variant = self.variant;
-        let fill_color = variant.color();
+        let has_explicit_style = self.style.is_some();
+        let has_explicit_height = (self.height - 8.0).abs() > f32::EPSILON;
+        let is_default_variant = !has_explicit_style && variant == ProgressVariant::Default;
+        let style = self.style.unwrap_or_default();
+
+        let fill_color = if variant == ProgressVariant::Default {
+            style.fill_color
+        } else {
+            variant.color()
+        };
+        let track_color = style.track_color;
+        let border_color = style.border_color;
+        let border_width = style.border_width;
         let width = self.width;
-        let height = self.height;
-        let radius = height * 0.5;
+        let height = if has_explicit_height {
+            self.height
+        } else {
+            style.height
+        };
+        let radius = if has_explicit_height || has_explicit_style {
+            style.radius.max(height * 0.5).min(height * 0.5)
+        } else {
+            style.radius
+        };
+        let border_radius = if has_explicit_style { style.radius } else { radius };
+        let luma_bar = LumaProgressBar {
+            value: clamped,
+            variant,
+            style,
+            has_explicit_style,
+            has_explicit_height,
+            is_default_variant,
+        };
 
         let s = bsn! {
-            LumaProgressBar {
-                value: clamped,
-                variant,
-            }
+            luma_bar
             UNode {
                 width,
                 height: { UVal::Px(height) },
-                background_color: Color::srgb(0.15, 0.18, 0.24),
-                border_radius: { UCornerRadius::all(radius) },
+                background_color: track_color,
+                border_radius: { UCornerRadius::all(border_radius) },
             }
             UBorder {
-                color: Color::srgb(0.22, 0.26, 0.34),
-                width: 1.0,
-                radius: { UCornerRadius::all(radius) },
+                color: border_color,
+                width: border_width,
+                radius: { UCornerRadius::all(border_radius) },
             }
             ULayout {
                 display: UDisplay::Flex,
@@ -142,8 +187,9 @@ impl Scene for ProgressBar {
                     width: { UVal::Percent(clamped) },
                     height: { UVal::Percent(1.0) },
                     background_color: fill_color,
-                    border_radius: { UCornerRadius::all(radius) },
+                    border_radius: { UCornerRadius::all(border_radius) },
                 }
+                Visibility::from(if clamped <= 0.001 { Visibility::Hidden } else { Visibility::Inherited })
             ]
         };
         s.resolve(context, scene)
@@ -163,17 +209,29 @@ pub fn luma_progress_bar(
 fn progress_bar_sync_system(
     bar_query: Query<(Entity, &LumaProgressBar), Changed<LumaProgressBar>>,
     children_query: Query<&Children>,
-    mut fill_query: Query<(&mut UNode, &mut LumaProgressFill)>,
+    mut fill_query: Query<(&mut UNode, &mut Visibility), With<LumaProgressFill>>,
 ) {
     for (bar_entity, bar) in bar_query.iter() {
         let clamped = bar.value.clamp(0.0, 1.0);
-        let color = bar.variant.color();
+        let color = if bar.variant == ProgressVariant::Default {
+            bar.style.fill_color
+        } else {
+            bar.variant.color()
+        };
 
         if let Ok(children) = children_query.get(bar_entity) {
             for child in children.iter() {
-                if let Ok((mut node, _)) = fill_query.get_mut(child) {
+                if let Ok((mut node, mut vis)) = fill_query.get_mut(child) {
                     node.width = UVal::Percent(clamped);
                     node.background_color = color;
+                    let target_vis = if clamped <= 0.001 {
+                        Visibility::Hidden
+                    } else {
+                        Visibility::Inherited
+                    };
+                    if *vis != target_vis {
+                        *vis = target_vis;
+                    }
                 }
             }
         }
@@ -345,34 +403,34 @@ impl Scene for CircularProgress {
 
         let grad = build_conic_gradient(clamped, fill_color, track_color);
 
-        if show_label {
-            let s = bsn! {
-                LumaCircularProgress {
-                    value: clamped,
-                    variant,
-                    size,
-                    thickness,
-                    track_color,
-                    show_label,
-                }
-                UNode {
-                    width: { UVal::Px(size) },
-                    height: { UVal::Px(size) },
-                    background_color: Color::NONE,
-                    border_radius: { UCornerRadius::all(radius) },
-                }
-                UBorder {
-                    color: Color::NONE,
-                    width: thickness,
-                    radius: { UCornerRadius::all(radius) },
-                }
-                grad
-                ULayout {
-                    display: UDisplay::Flex,
-                    justify_content: UJustifyContent::Center,
-                    align_items: UAlignItems::Center,
-                }
-                Children [
+        let s = bsn! {
+            LumaCircularProgress {
+                value: clamped,
+                variant,
+                size,
+                thickness,
+                track_color,
+                show_label,
+            }
+            UNode {
+                width: { UVal::Px(size) },
+                height: { UVal::Px(size) },
+                background_color: Color::NONE,
+                border_radius: { UCornerRadius::all(radius) },
+            }
+            UBorder {
+                color: Color::NONE,
+                width: thickness,
+                radius: { UCornerRadius::all(radius) },
+            }
+            grad
+            ULayout {
+                display: UDisplay::Flex,
+                justify_content: UJustifyContent::Center,
+                align_items: UAlignItems::Center,
+            }
+            Children [
+                @{ConditionalScene(show_label.then(|| bsn! {
                     LumaCircularProgressText
                     UText {
                         text: label_text,
@@ -380,39 +438,10 @@ impl Scene for CircularProgress {
                         font,
                         color: Color::srgb(0.95, 0.96, 0.98),
                     }
-                ]
-            };
-            s.resolve(context, scene)
-        } else {
-            let s = bsn! {
-                LumaCircularProgress {
-                    value: clamped,
-                    variant,
-                    size,
-                    thickness,
-                    track_color,
-                    show_label,
-                }
-                UNode {
-                    width: { UVal::Px(size) },
-                    height: { UVal::Px(size) },
-                    background_color: Color::NONE,
-                    border_radius: { UCornerRadius::all(radius) },
-                }
-                UBorder {
-                    color: Color::NONE,
-                    width: thickness,
-                    radius: { UCornerRadius::all(radius) },
-                }
-                grad
-                ULayout {
-                    display: UDisplay::Flex,
-                    justify_content: UJustifyContent::Center,
-                    align_items: UAlignItems::Center,
-                }
-            };
-            s.resolve(context, scene)
-        }
+                }))}
+            ]
+        };
+        s.resolve(context, scene)
     }
 }
 
@@ -457,10 +486,12 @@ fn circular_progress_sync_system(
 
         if prog.show_label {
             let percent_str = format!("{:.0}%", clamped * 100.0);
+            let font_size = (prog.size * 0.22).clamp(10.0, 32.0);
             if let Ok(children) = children_query.get(entity) {
                 for child in children.iter() {
                     if let Ok(mut utext) = text_query.get_mut(child) {
                         utext.text = percent_str.clone();
+                        utext.font_size = font_size;
                     }
                 }
             }

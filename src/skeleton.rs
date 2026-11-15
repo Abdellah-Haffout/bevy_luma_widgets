@@ -1,24 +1,31 @@
 //! Loading skeleton placeholder widget with smooth pulsing animation.
 
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::shift_brightness;
 
 /// Marker and state component for an animated loading skeleton shape.
 #[derive(Component, Clone, Debug, Reflect)]
 pub struct LumaSkeleton {
     pub pulse_speed: f32,
+    pub base_color: Color,
+    pub peak_color: Color,
 }
 
 impl Default for LumaSkeleton {
     fn default() -> Self {
-        Self { pulse_speed: 2.5 }
+        Self {
+            pulse_speed: 2.5,
+            base_color: SKELETON_BASE_COLOR,
+            peak_color: SKELETON_PEAK_COLOR,
+        }
     }
 }
 
 const SKELETON_BASE_COLOR: Color = Color::srgb(0.12, 0.15, 0.20);
 const SKELETON_PEAK_COLOR: Color = Color::srgb(0.20, 0.25, 0.34);
-
-use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 
 /// Declarative Skeleton placeholder widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]
@@ -78,10 +85,17 @@ impl Scene for Skeleton {
         let radius = self.radius;
         let pulse_speed = self.pulse_speed;
         let base_color = self.base_color;
+        let peak_color = if base_color == SKELETON_BASE_COLOR {
+            SKELETON_PEAK_COLOR
+        } else {
+            shift_brightness(base_color, 0.08)
+        };
 
         let s = bsn! {
             LumaSkeleton {
                 pulse_speed,
+                base_color,
+                peak_color,
             }
             UNode {
                 width,
@@ -109,8 +123,8 @@ fn skeleton_pulse_system(
     let t = time.elapsed_secs();
     for (skeleton, mut node) in query.iter_mut() {
         let factor = (t * skeleton.pulse_speed).sin() * 0.5 + 0.5; // [0.0, 1.0]
-        let base_linear = SKELETON_BASE_COLOR.to_linear();
-        let peak_linear = SKELETON_PEAK_COLOR.to_linear();
+        let base_linear = skeleton.base_color.to_linear();
+        let peak_linear = skeleton.peak_color.to_linear();
 
         let r = base_linear.red + (peak_linear.red - base_linear.red) * factor;
         let g = base_linear.green + (peak_linear.green - base_linear.green) * factor;
@@ -120,7 +134,7 @@ fn skeleton_pulse_system(
             red: r,
             green: g,
             blue: b,
-            alpha: 1.0,
+            alpha: base_linear.alpha + (peak_linear.alpha - base_linear.alpha) * factor,
         });
     }
 }

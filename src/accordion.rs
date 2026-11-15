@@ -1,7 +1,10 @@
 //! Collapsible accordion component for expandable disclosure sections.
 
 use bevy::prelude::*;
+use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 use bevy_luma::prelude::*;
+
+use crate::helpers::{find_ancestor_or_self, is_primary_click, visit_descendants, DescendantVisit};
 
 /// Marker and state component for an accordion item.
 #[derive(Component, Clone, Debug, Default, Reflect)]
@@ -27,8 +30,6 @@ pub struct AccordionToggled {
     pub entity: Entity,
     pub is_expanded: bool,
 }
-
-use bevy::scene::{ResolveContext, ResolvedScene, ResolveSceneError};
 
 /// Declarative AccordionItem widget struct.
 #[derive(Clone, Debug, Reflect)]
@@ -198,14 +199,19 @@ pub fn luma_accordion_item<C: Scene>(
 }
 
 fn toggle_accordion(
-    header_entity: Entity,
+    target_entity: Entity,
     commands: &mut Commands,
-    header_query: Query<&ChildOf, With<LumaAccordionHeader>>,
-    mut item_query: Query<(Entity, &mut LumaAccordionItem, &Children)>,
-    mut content_query: Query<&mut ULayout, With<LumaAccordionContent>>,
-    mut chevron_query: Query<&mut UText, With<LumaAccordionChevron>>,
-    children_query: Query<&Children>,
+    parents_query: &Query<&ChildOf>,
+    header_query: &Query<&ChildOf, With<LumaAccordionHeader>>,
+    nested_items: &Query<(), With<LumaAccordionItem>>,
+    item_query: &mut Query<(Entity, &mut LumaAccordionItem, &Children)>,
+    content_query: &mut Query<&mut ULayout, With<LumaAccordionContent>>,
+    chevron_query: &mut Query<&mut UText, With<LumaAccordionChevron>>,
+    children_query: &Query<&Children>,
 ) {
+    let Some(header_entity) = find_ancestor_or_self(target_entity, header_query, parents_query) else {
+        return;
+    };
     let Ok(child_of) = header_query.get(header_entity) else {
         return;
     };
@@ -218,24 +224,27 @@ fn toggle_accordion(
     item.is_expanded = !item.is_expanded;
     let is_expanded = item.is_expanded;
 
-    // Traverse children to find Content and Chevron
     for child in children.iter() {
-        if let Ok(mut layout) = content_query.get_mut(child) {
-            layout.display = if is_expanded { UDisplay::Flex } else { UDisplay::None };
-        }
-
-        // Header has children containing Chevron
-        if let Ok(sub_children) = children_query.get(child) {
-            for sub_child in sub_children.iter() {
-                if let Ok(mut text) = chevron_query.get_mut(sub_child) {
-                    text.text = if is_expanded {
-                        Icon::CHEVRON_UP.to_string()
-                    } else {
-                        Icon::CHEVRON_DOWN.to_string()
-                    };
-                }
+        visit_descendants(child, children_query, |descendant| {
+            if nested_items.contains(descendant) {
+                return DescendantVisit::SkipChildren;
             }
-        }
+            if let Ok(mut layout) = content_query.get_mut(descendant) {
+                layout.display = if is_expanded {
+                    UDisplay::Flex
+                } else {
+                    UDisplay::None
+                };
+            }
+            if let Ok(mut text) = chevron_query.get_mut(descendant) {
+                text.text = if is_expanded {
+                    Icon::CHEVRON_UP.to_string()
+                } else {
+                    Icon::CHEVRON_DOWN.to_string()
+                };
+            }
+            DescendantVisit::Continue
+        });
     }
 
     commands.trigger(AccordionToggled {
@@ -247,40 +256,51 @@ fn toggle_accordion(
 fn on_accordion_header_click(
     trigger: On<PointerClick>,
     mut commands: Commands,
+    parents_query: Query<&ChildOf>,
     header_query: Query<&ChildOf, With<LumaAccordionHeader>>,
-    item_query: Query<(Entity, &mut LumaAccordionItem, &Children)>,
-    content_query: Query<&mut ULayout, With<LumaAccordionContent>>,
-    chevron_query: Query<&mut UText, With<LumaAccordionChevron>>,
+    nested_items: Query<(), With<LumaAccordionItem>>,
+    mut item_query: Query<(Entity, &mut LumaAccordionItem, &Children)>,
+    mut content_query: Query<&mut ULayout, With<LumaAccordionContent>>,
+    mut chevron_query: Query<&mut UText, With<LumaAccordionChevron>>,
     children_query: Query<&Children>,
 ) {
+    if !is_primary_click(&trigger) {
+        return;
+    }
     toggle_accordion(
         trigger.entity,
         &mut commands,
-        header_query,
-        item_query,
-        content_query,
-        chevron_query,
-        children_query,
+        &parents_query,
+        &header_query,
+        &nested_items,
+        &mut item_query,
+        &mut content_query,
+        &mut chevron_query,
+        &children_query,
     );
 }
 
 fn on_accordion_header_activate(
     trigger: On<UFocusActivate>,
     mut commands: Commands,
+    parents_query: Query<&ChildOf>,
     header_query: Query<&ChildOf, With<LumaAccordionHeader>>,
-    item_query: Query<(Entity, &mut LumaAccordionItem, &Children)>,
-    content_query: Query<&mut ULayout, With<LumaAccordionContent>>,
-    chevron_query: Query<&mut UText, With<LumaAccordionChevron>>,
+    nested_items: Query<(), With<LumaAccordionItem>>,
+    mut item_query: Query<(Entity, &mut LumaAccordionItem, &Children)>,
+    mut content_query: Query<&mut ULayout, With<LumaAccordionContent>>,
+    mut chevron_query: Query<&mut UText, With<LumaAccordionChevron>>,
     children_query: Query<&Children>,
 ) {
     toggle_accordion(
         trigger.entity,
         &mut commands,
-        header_query,
-        item_query,
-        content_query,
-        chevron_query,
-        children_query,
+        &parents_query,
+        &header_query,
+        &nested_items,
+        &mut item_query,
+        &mut content_query,
+        &mut chevron_query,
+        &children_query,
     );
 }
 

@@ -6,12 +6,14 @@ use bevy_luma::prelude::*;
 
 use crate::theme::CardStyle;
 
-/// Marker component for an elevated card container.
+/// Marker and metadata component for an elevated card container.
 #[derive(Component, Clone, Debug, Default, Reflect)]
-pub struct LumaCard;
-
-const CARD_BG: Color = Color::srgb(0.11, 0.13, 0.18);
-const CARD_BORDER: Color = Color::srgb(0.20, 0.24, 0.32);
+pub struct LumaCard {
+    pub has_explicit_style: bool,
+    pub has_explicit_padding: bool,
+    pub has_explicit_bg: bool,
+    pub has_explicit_border: bool,
+}
 
 /// Declarative Card container widget struct with all configurable properties.
 #[derive(Clone, Debug, Reflect)]
@@ -65,17 +67,25 @@ impl Scene for Card {
         context: &mut ResolveContext,
         scene: &mut ResolvedScene,
     ) -> Result<(), ResolveSceneError> {
+        let defaults = CardStyle::default();
+        let has_explicit_style = self.style.is_some();
+        let has_explicit_padding = (self.padding - defaults.padding).abs() > f32::EPSILON;
         let (bg, border_color, border_width, radius, padding) = if let Some(ref s) = self.style {
             (s.bg_color, s.border_color, s.border_width, s.radius, s.padding)
         } else {
-            (CARD_BG, CARD_BORDER, 1.0, 12.0, self.padding)
+            (defaults.bg_color, defaults.border_color, defaults.border_width, defaults.radius, self.padding)
         };
 
         let width = self.width;
         let gap = self.gap;
 
         let s = bsn! {
-            LumaCard
+            LumaCard {
+                has_explicit_style,
+                has_explicit_padding,
+                has_explicit_bg: false,
+                has_explicit_border: false,
+            }
             UNode {
                 width,
                 background_color: bg,
